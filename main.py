@@ -16,7 +16,7 @@ from datetime import datetime, timedelta
 from dotenv import load_dotenv #.envファイルを読み取るためのimport
 import os
 load_dotenv()
-SECRET_KEY = os.getenv("SECRET_KEY")
+SECRET_KEY = os.getenv("SECRET_KEY") or "dummy-secret"
 if not SECRET_KEY:
     raise RuntimeError("SECRET_KEY is not set in environment variables!")
 ALGORITHM = "HS256"
