@@ -59,7 +59,7 @@ FastAPIをコンテナで動かす
 このリポジトリをクローン
 https://github.com/himura467/kuis-holla-fastapi.git 
 
-### ➓Dockerで起動
+### 8 Dockerで起動
 以下のコマンドでFastAPIコンテナをビルド＆起動
 ```bash
 docker compose up --build
