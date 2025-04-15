@@ -55,72 +55,9 @@ FastAPIをコンテナで動かす
 [https://www.docker.com/products/docker-desktop/](https://www.docker.com/products/docker-desktop/)
 
 ---
-
-### ⑦ Dockerfile の作成
-
-プロジェクトルートに `Dockerfile` を作成：
-
-```dockerfile
-FROM python:3.12-slim
-
-WORKDIR /app
-
-ENV POETRY_VIRTUALENVS_CREATE=false
-
-RUN pip install --upgrade pip && \
-    pip install poetry
-
-COPY pyproject.toml poetry.lock* ./
-RUN poetry install --no-root
-
-COPY . .
-
-CMD ["poetry", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
-```
-
----
-
-### ⑧ Dockerfile の作成
-
-プロジェクトルートに `Dockerfile` を作成し、以下の内容を記述：
-
-```dockerfile
-FROM python:3.12-slim
-
-WORKDIR /app
-
-ENV POETRY_VIRTUALENVS_CREATE=false
-
-RUN pip install --upgrade pip && \
-    pip install poetry
-
-COPY pyproject.toml poetry.lock* ./
-RUN poetry install --no-root
-
-COPY . .
-
-CMD ["poetry", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
-```
-
-### ⑨ docker-compose.yml の作成
-プロジェクトルートに Dockerfile を作成：
-```dockerfile
-FROM python:3.12.7-slim
-
-WORKDIR /app
-
-ENV POETRY_VIRTUALENVS_CREATE=false
-
-RUN pip install --upgrade pip && \
-    pip install poetry
-
-COPY pyproject.toml poetry.lock* ./
-RUN poetry install --no-root
-
-COPY . .
-
-CMD ["poetry", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
-```
+### 7 ファイルをディレクトリに追加
+このリポジトリをクローン
+https://github.com/himura467/kuis-holla-fastapi.git 
 
 ### ➓Dockerで起動
 以下のコマンドでFastAPIコンテナをビルド＆起動
