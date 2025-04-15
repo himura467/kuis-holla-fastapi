@@ -105,7 +105,7 @@ CMD ["poetry", "run", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "800
 ### ⑨ docker-compose.yml の作成
 プロジェクトルートに Dockerfile を作成：
 ```dockerfile
-FROM python:3.12-slim
+FROM python:3.12.7-slim
 
 WORKDIR /app
 
