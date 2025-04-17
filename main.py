@@ -1,6 +1,7 @@
 # FastAPI本体とセキュリティ関連
 from fastapi import FastAPI, HTTPException, status, Depends
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from starlette.middleware.cors import CORSMiddleware
 
 # モデル・DB関連
 from pydantic import BaseModel
@@ -28,6 +29,14 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/login")  # Swagger UIが認識�
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")  # パスワードハッシュ用
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,   # 追記により追加
+    allow_methods=["*"],      # 追記により追加
+    allow_headers=["*"]       # 追記により追加
+)
 
 DATABASE_URL = "sqlite:///./test.db"#同じディレクトリ内のtest.dbファイル
 database = Database(DATABASE_URL)
