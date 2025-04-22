@@ -102,11 +102,13 @@ metadata.create_all(engine)#ここで、metadataに格納されているすべ�
 class UserCreate(BaseModel):  # 登録用
     name: str
     password: str
+
     gender: str
     department: str
     hobby: List[str] # not sure about this one
     hometown: str
     language: str
+
 
 class UserLogin(BaseModel):  # 未使用（今はOAuth2Formに依存）
       name: str #<=clientの送ってくる[name]は、str型出なくてはならない 
@@ -135,6 +137,7 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
 #サーバー起動中にcurl http://localhost:8000/users でuserリスト確認
 
 
+
 # イベント相関
 class EventCreate(BaseModel):
     event_name: str
@@ -142,6 +145,7 @@ class EventCreate(BaseModel):
     start_time: datetime
     end_time: datetime
     registered_users: List[str]
+
 
 # Pydanticモデル（入力と出力）
 class UserIn(BaseModel):
@@ -151,9 +155,11 @@ class UserOut(BaseModel):
     id: int #APIの返すidはintでなければならない
     name: str #,,,はstrでなければならない
 
+
 class EventOut(BaseModel):
     id: int
     event_name: str
+
 
 #トークン検証用の関数
 async def get_current_user(token: str = Depends(oauth2_scheme)):
@@ -254,7 +260,9 @@ async def create_user(user: UserIn):
 @app.post("/register", response_model=UserOut)##登録用POST
 async def register_user(user: UserCreate):
     hashed_pw = hash_password(user.password)
+
     query = users.insert().values(name=user.name, hashed_password=hashed_pw, gender=user.gender, department=user.department, hobby=user.hobby, hometown=user.hometown, language=user.language, status=0)
+
     user_id = await database.execute(query)
     return {**user.dict(exclude={"password"}), "id": user_id}
 #{リクエスト
@@ -317,6 +325,7 @@ async def delete_user(user_id: int):
  # "id": 3,
   #"name": "たくみ（改）"
 #}
+
 
 
 # POST: イベント登録
@@ -395,3 +404,4 @@ async def generate_topic(current_user: dict = Depends(get_current_user)):
     generated_topic = generate_dummy_topic(name, department, hobby, hometown)
 
     return {"suggested_topic": generated_topic}
+
