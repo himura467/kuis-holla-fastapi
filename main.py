@@ -70,9 +70,9 @@ users = Table(
     Column("hashed_password", String, nullable=False),
     Column("gender", String, nullable=True),
     Column("department", String, nullable=True),
-    Column("hobby", JSON, nullable=True),
+    Column("hobbies", JSON, nullable=True),
     Column("hometown", String, nullable=True),
-    Column("language", String, nullable=True),
+    Column("languages", JSON, nullable=True),
     Column("status", Integer, nullable=True),
     Column("talk_times", Integer, nullable=True)
 )
@@ -104,9 +104,9 @@ class UserCreate(BaseModel):  # 登録用
     password: str
     gender: str
     department: str
-    hobby: List[str] # not sure about this one
+    hobbies: List[str] # not sure about this one
     hometown: str
-    language: str
+    languages: List[str]
 
 class UserLogin(BaseModel):  # 未使用（今はOAuth2Formに依存）
       name: str #<=clientの送ってくる[name]は、str型出なくてはならない 
