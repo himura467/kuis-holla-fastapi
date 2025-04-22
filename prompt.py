@@ -2,7 +2,7 @@
 
 from typing import List
 
-import openai
+# import openai
 
 
 def generate_dummy_topic(
@@ -14,8 +14,8 @@ def generate_dummy_topic(
     )
 
 
-def generate_openai_topic(prompt: str) -> str:
-    response = openai.ChatCompletion.create(
-        model="gpt-3.5-turbo", messages=[{"role": "user", "content": prompt}]
-    )
-    return response.choices[0].message.content
+# def generate_openai_topic(prompt: str) -> str:
+#     response = openai.ChatCompletion.create(
+#         model="gpt-3.5-turbo", messages=[{"role": "user", "content": prompt}]
+#     )
+#     return response.choices[0].message.content
