@@ -82,7 +82,8 @@ events = Table(
     Column("id", Integer, primary_key=True),
     Column("event_name", String, nullable=False),
     Column("place", String, nullable=False),
-    Column("time", DateTime, nullable=False),
+    Column("start_time", DateTime, nullable=False),
+    Column("end_time", DateTime, nullable=False),
     Column("registered_users", JSON, nullable=False)
 )
 
@@ -137,7 +138,8 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
 class EventCreate(BaseModel):
     event_name: str
     place: str
-    time: datetime
+    start_time: datetime
+    end_time: datetime
     registered_users: List[str]
 
 # Pydanticモデル（入力と出力）
@@ -318,8 +320,8 @@ async def delete_user(user_id: int):
 
 # POST: イベント登録
 @app.post("/register_event", response_model=EventOut)
-async def register_event(event: EventCreate):
-    query = events.insert().values(event_name=event.event_name, place=event.place, time=event.time, registered_user=event.registered_users)
+async def register_event(event: EventCreate): 
+    query = events.insert().values(event_name=event.event_name, place=event.place, start_time=event.start_time, end_time=event.end_time, registered_user=event.registered_users)
     event_id = await database.execute(query)
     return {**event.dict, "id": event_id}
 
