@@ -338,7 +338,7 @@ async def delete_user(user_id: int):
 
 
 # POST: イベント登録
-@app.post("/register_event", response_model=EventOut)
+@app.post("/events/register", response_model=EventOut)
 async def register_event(event: EventCreate): 
     query = events.insert().values(event_name=event.event_name, place=event.place, start_time=event.start_time, end_time=event.end_time, registered_users=event.registered_users)
     event_id = await database.execute(query)
