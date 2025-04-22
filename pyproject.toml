@@ -21,7 +21,24 @@ openai = "^1.75.0"
 
 [tool.poetry.group.dev.dependencies]
 uvicorn = {extras = ["standard"], version = "^0.34.0"}
+poethepoet = "^0.34.0"
+mypy = "^1.15.0"
+isort = "^6.0.1"
+flake8 = "^7.2.0"
+black = "^25.1.0"
 
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+
+[tool.isort]
+profile = "black"
+line_length = 88
+
+[tool.poe.tasks]
+mypy = "mypy --config-file mypy.ini main.py"
+flake8 = "flake8 --config .flake8 main.py"
+black = "black main.py"
+isort = "isort main.py"
+lint = ["mypy", "flake8"]
+format = ["black", "isort"]
