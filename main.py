@@ -72,8 +72,8 @@ users = Table(
     Column("department", String, nullable=True),
     Column("hobby", JSON, nullable=True),
     Column("hometown", String, nullable=True),
-    Column("language", String, nullable=False),
-    Column("status", Integer, nullable=False)
+    Column("language", String, nullable=True),
+    Column("status", Integer, nullable=True)
 )
 
 events = Table(
@@ -81,10 +81,10 @@ events = Table(
     metadata,
     Column("id", Integer, primary_key=True),
     Column("event_name", String, nullable=False),
-    Column("place", String, nullable=False),
-    Column("start_time", DateTime, nullable=False),
-    Column("end_time", DateTime, nullable=False),
-    Column("registered_users", JSON, nullable=False)
+    Column("place", String, nullable=True),
+    Column("start_time", DateTime, nullable=True),
+    Column("end_time", DateTime, nullable=True),
+    Column("registered_users", JSON, nullable=True)
 )
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
