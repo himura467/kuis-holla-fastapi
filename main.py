@@ -4,7 +4,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
 # モデル・DB関連
 from pydantic import BaseModel
-from sqlalchemy import Column, Integer, String, DateTime, JSON, create_engine, MetaData, Table, text
+from sqlalchemy import Column, Integer, String, DateTime, JSON, create_engine, MetaData, Table
 from databases import Database
 from typing import List
 
@@ -30,9 +30,9 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")  # パスワ�
 
 app = FastAPI()
 
-DATABASE_URL = "sqlite:///./test2.db" #同じディレクトリ内のtest2.dbファイル
+DATABASE_URL = "sqlite:///./database.db"#同じディレクトリ内のtest.dbファイル
 database = Database(DATABASE_URL)
-metadata = MetaData() #metadataを生成
+metadata = MetaData()#metadataを生成
 
 """
 テーブル：
@@ -73,7 +73,8 @@ users = Table(
     Column("hobby", JSON, nullable=True),
     Column("hometown", String, nullable=True),
     Column("language", String, nullable=True),
-    Column("status", Integer, nullable=True)
+    Column("status", Integer, nullable=True),
+    Column("talked_count", Integer, nullable=True, default=0)
 )
 
 events = Table(
@@ -319,7 +320,7 @@ async def delete_user(user_id: int):
 
 
 # POST: イベント登録
-@app.post("/events/register", response_model=EventOut)
+@app.post("/register_event", response_model=EventOut)
 async def register_event(event: EventCreate): 
     query = events.insert().values(event_name=event.event_name, place=event.place, start_time=event.start_time, end_time=event.end_time, registered_users=event.registered_users)
     event_id = await database.execute(query)
@@ -360,3 +361,37 @@ async def delete_event(event_id: int):
     delete_query = events.delete().where(events.c.id == event_id)
     await database.execute(delete_query)
     return existing_event
+
+
+
+#####話しかけられた回数を更新するためのエンドポイントを追加
+@app.post("/users/{user_id}/increment_talk_count")
+async def increment_talked_count(user_id: int):
+    query = users.select().where(users.c.id == user_id)
+    user = await database.fetch_one(query)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    new_count = (user["talked_count"] or 0) + 1
+    update_query = users.update().where(users.c.id == user_id).values(talked_count=new_count)
+    await database.execute(update_query)
+    return {"id": user_id, "talked_count": new_count}
+
+####################################chatGPTによるサジェスト
+
+
+from prompt import generate_dummy_topic  # ← 追加
+
+@app.post("/topic/generate")
+async def generate_topic(current_user: dict = Depends(get_current_user)):
+    name = current_user["name"]
+    gender = current_user["gender"] or "不明"
+    department = current_user["department"] or "未設定"
+    hobby = current_user["hobby"] or []
+    hometown = current_user["hometown"] or "不明"
+    language = current_user["language"] or "不明"
+
+    # 外部に分離された関数を使って話題生成
+    generated_topic = generate_dummy_topic(name, department, hobby, hometown)
+
+    return {"suggested_topic": generated_topic}
