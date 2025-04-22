@@ -4,7 +4,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
 # モデル・DB関連
 from pydantic import BaseModel
-from sqlalchemy import Column, Integer, String, DateTime, JSON, create_engine, MetaData, Table
+from sqlalchemy import Column, Integer, String, DateTime, JSON, create_engine, MetaData, Table, text
 from databases import Database
 from typing import List
 
@@ -30,9 +30,9 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")  # パスワ�
 
 app = FastAPI()
 
-DATABASE_URL = "sqlite:///./test2.db"#同じディレクトリ内のtest.dbファイル
+DATABASE_URL = "sqlite:///./test2.db" #同じディレクトリ内のtest2.dbファイル
 database = Database(DATABASE_URL)
-metadata = MetaData()#metadataを生成
+metadata = MetaData() #metadataを生成
 
 """
 テーブル：
@@ -319,7 +319,7 @@ async def delete_user(user_id: int):
 
 
 # POST: イベント登録
-@app.post("/register_event", response_model=EventOut)
+@app.post("/events/register", response_model=EventOut)
 async def register_event(event: EventCreate): 
     query = events.insert().values(event_name=event.event_name, place=event.place, start_time=event.start_time, end_time=event.end_time, registered_users=event.registered_users)
     event_id = await database.execute(query)
@@ -337,3 +337,26 @@ async def get_active_events():
     if active_events is None:
         raise HTTPException(status_code=404, detail="Event not found")
     return active_events
+
+# GET: UserIDで参加しているイベントを獲得
+@app.get("/events/user/{user_name}", response_model=List[EventOut])
+async def get_user_events(user_name: str):
+    like_pattern = f'%"{user_name}"%'
+    query = events.select().where(
+        events.c.registered_users.like(like_pattern)
+    )
+    user_events = await database.fetch_all(query)
+    if not user_events:
+        raise HTTPException(status_code=404, detail="No active events found for user")
+    return user_events
+
+# DELETE: イベントをIDで削除
+@app.delete("/events/{event_id}", response_model=EventOut)
+async def delete_event(event_id: int):
+    query = events.select().where(events.c.id == event_id)
+    existing_event = await database.fetch_one(query)
+    if existing_event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    delete_query = events.delete().where(events.c.id == event_id)
+    await database.execute(delete_query)
+    return existing_event
