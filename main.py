@@ -4,8 +4,9 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 
 # モデル・DB関連
 from pydantic import BaseModel
-from sqlalchemy import Column, Integer, String, create_engine, MetaData, Table
-from databases import Database 
+from sqlalchemy import Column, Integer, String, DateTime, JSON, create_engine, MetaData, Table
+from databases import Database
+from typing import List
 
 # 認証・ハッシュ・トークン生成
 from passlib.context import CryptContext
@@ -33,6 +34,33 @@ DATABASE_URL = "sqlite:///./test.db"#同じディレクトリ内のtest.dbファ
 database = Database(DATABASE_URL)
 metadata = MetaData()#metadataを生成
 
+"""
+テーブル：
+
+ユーザーテーブル：
+　id（自動生成）、ユーザー名（username）、パスワード（password）、性別（gender）、学部・研究科（department）、趣味（hobby）、出身地（hometown）、言語（language）、ステータス（status）
+
+イベントテーブル：
+　id（自動生成）、名前（name）、場所（place）、時間（time）、登録ユーザー（registered users）
+
+ログインページ >>
+ユーザー情報：ユーザー名、パスワード
+
+アカウント作成ページ >>
+ユーザー登録情報：id（自動生成）、ユーザー名、パスワード、性別、学部、趣味、出身地、言語
+
+イベント情報ページ >>
+イベント情報：id（自動生成）、名前、場所、時間、登録ユーザー
+
+おすすめユーザーページ >>
+ユーザー一覧：ユーザー名、ステータス（フィルター：趣味、学部、出身地、言語；ソート可能）
+
+生成AIページ >>
+入力情報：ユーザー名、性別、学部、趣味、出身地、言語
+（生成AIが必要な情報：性別、学部、趣味、出身地、言語）
+（生成後、ステータスが変更される）
+"""
+
 # usersテーブル定義（id, name, hashed_password）適宜追加可能
 users = Table(
     "users",
@@ -40,6 +68,22 @@ users = Table(
     Column("id", Integer, primary_key=True),
     Column("name", String, nullable=False),
     Column("hashed_password", String, nullable=False),
+    Column("gender", String, nullable=True),
+    Column("department", String, nullable=True),
+    Column("hobby", JSON, nullable=True),
+    Column("hometown", String, nullable=True),
+    Column("language", String, nullable=False),
+    Column("status", Integer, nullable=False)
+)
+
+events = Table(
+    "events",
+    metadata,
+    Column("id", Integer, primary_key=True),
+    Column("event_name", String, nullable=False),
+    Column("place", String, nullable=False),
+    Column("time", DateTime, nullable=False),
+    Column("registered_users", JSON, nullable=False)
 )
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
@@ -56,6 +100,11 @@ metadata.create_all(engine)#ここで、metadataに格納されているすべ�
 class UserCreate(BaseModel):  # 登録用
     name: str
     password: str
+    gender: str
+    department: str
+    hobby: List[str] # not sure about this one
+    hometown: str
+    language: str
 
 class UserLogin(BaseModel):  # 未使用（今はOAuth2Formに依存）
       name: str #<=clientの送ってくる[name]は、str型出なくてはならない 
@@ -84,6 +133,12 @@ def create_access_token(data: dict, expires_delta: timedelta = None):
 #サーバー起動中にcurl http://localhost:8000/users でuserリスト確認
 
 
+# イベント相関
+class EventCreate(BaseModel):
+    event_name: str
+    place: str
+    time: datetime
+    registered_users: List[str]
 
 # Pydanticモデル（入力と出力）
 class UserIn(BaseModel):
@@ -92,6 +147,10 @@ class UserIn(BaseModel):
 class UserOut(BaseModel):
     id: int #APIの返すidはintでなければならない
     name: str #,,,はstrでなければならない
+
+class EventOut(BaseModel):
+    id: int
+    event_name: str
 
 #トークン検証用の関数
 async def get_current_user(token: str = Depends(oauth2_scheme)):
@@ -192,7 +251,7 @@ async def create_user(user: UserIn):
 @app.post("/register", response_model=UserOut)##登録用POST
 async def register_user(user: UserCreate):
     hashed_pw = hash_password(user.password)
-    query = users.insert().values(name=user.name, hashed_password=hashed_pw)
+    query = users.insert().values(name=user.name, hashed_password=hashed_pw, gender=user.gender, department=user.department, hobby=user.hobby, hometown=user.hometown, language=user.language)
     user_id = await database.execute(query)
     return {**user.dict(exclude={"password"}), "id": user_id}
 #{リクエスト
@@ -256,3 +315,23 @@ async def delete_user(user_id: int):
   #"name": "たくみ（改）"
 #}
 
+
+# POST: イベント登録
+@app.post("/register_event", response_model=EventOut)
+async def register_event(event: EventCreate):
+    query = events.insert().values(event_name=event.event_name, place=event.place, time=event.time, registered_user=event.registered_users)
+    event_id = await database.execute(query)
+    return {**event.dict, "id": event_id}
+
+# GET: 現在進行中のイベントを獲得
+@app.get("/events/active", response_model=List[EventOut])
+async def get_active_events():
+    now = datetime.utcnow()
+    query = events.select().where(
+        (events.c.start_time <= now) &
+        (events.c.end_time >= now)
+    )
+    active_events = await database.fetch_all(query)
+    if active_events is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    return active_events
