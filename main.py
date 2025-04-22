@@ -6,7 +6,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from sqlalchemy import Column, Integer, String, DateTime, JSON, create_engine, MetaData, Table
 from databases import Database
-from typing import List
+from typing import List, Optional
 
 # 認証・ハッシュ・トークン生成
 from passlib.context import CryptContext
@@ -30,7 +30,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")  # パスワ�
 
 app = FastAPI()
 
-DATABASE_URL = "sqlite:///./database.db"#同じディレクトリ内のtest.dbファイル
+DATABASE_URL = "sqlite:///./database.db" #同じディレクトリ内のtest2.dbファイル
 database = Database(DATABASE_URL)
 metadata = MetaData()#metadataを生成
 
@@ -74,7 +74,7 @@ users = Table(
     Column("hometown", String, nullable=True),
     Column("language", String, nullable=True),
     Column("status", Integer, nullable=True),
-    Column("talked_count", Integer, nullable=True, default=0)
+    Column("talk_times", Integer, nullable=True)
 )
 
 events = Table(
@@ -155,6 +155,15 @@ class UserOut(BaseModel):
     id: int #APIの返すidはintでなければならない
     name: str #,,,はstrでなければならない
 
+class UserNameOut(BaseModel):
+    name: str #,,,はstrでなければならない
+
+class EventIn(BaseModel):
+    event_name: Optional[str] = None
+    place: Optional[str] = None
+    start_time: Optional[datetime] = None
+    end_time: Optional[datetime] = None
+    registered_users: Optional[List[str]] = None
 
 class EventOut(BaseModel):
     id: int
@@ -357,8 +366,35 @@ async def get_user_events(user_name: str):
     )
     user_events = await database.fetch_all(query)
     if not user_events:
-        raise HTTPException(status_code=404, detail="No active events found for user")
+        raise HTTPException(status_code=404, detail="No events found")
     return user_events
+
+# GET: 現在のユーザーが参加しているイベントを獲得
+@app.get("/events/me", response_model=List[EventOut])
+async def get_my_event(current_user: dict = Depends(get_current_user)):
+    like_pattern = f'%{current_user["name"]}%'
+    query = events.select().where(
+        events.c.registered_users.like(like_pattern)
+    )
+    user_events = await database.fetch_all(query)
+    if not user_events:
+        raise HTTPException(status_code=404, detail="No events found")
+    return user_events
+
+
+# PUT: イベント更新
+@app.put("/events/{event_id}", response_model=EventOut)
+async def update_event(event_id: int, event: EventIn):
+    await database.connect()
+    query = events.select().where(events.c.id == event_id)
+    existing_event = await database.fetch_one(query)
+    if existing_event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    update_data = event.dict(exclude_unset=True)
+    if update_data:
+        update_query = events.update().where(events.c.id == event_id).values(**update_data)
+        await database.execute(update_query)
+    return existing_event
 
 # DELETE: イベントをIDで削除
 @app.delete("/events/{event_id}", response_model=EventOut)
