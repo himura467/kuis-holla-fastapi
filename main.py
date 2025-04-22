@@ -30,7 +30,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")  # パスワ�
 
 app = FastAPI()
 
-DATABASE_URL = "sqlite:///./test.db"#同じディレクトリ内のtest.dbファイル
+DATABASE_URL = "sqlite:///./test2.db"#同じディレクトリ内のtest.dbファイル
 database = Database(DATABASE_URL)
 metadata = MetaData()#metadataを生成
 
@@ -253,7 +253,7 @@ async def create_user(user: UserIn):
 @app.post("/register", response_model=UserOut)##登録用POST
 async def register_user(user: UserCreate):
     hashed_pw = hash_password(user.password)
-    query = users.insert().values(name=user.name, hashed_password=hashed_pw, gender=user.gender, department=user.department, hobby=user.hobby, hometown=user.hometown, language=user.language)
+    query = users.insert().values(name=user.name, hashed_password=hashed_pw, gender=user.gender, department=user.department, hobby=user.hobby, hometown=user.hometown, language=user.language, status=0)
     user_id = await database.execute(query)
     return {**user.dict(exclude={"password"}), "id": user_id}
 #{リクエスト
@@ -321,9 +321,9 @@ async def delete_user(user_id: int):
 # POST: イベント登録
 @app.post("/register_event", response_model=EventOut)
 async def register_event(event: EventCreate): 
-    query = events.insert().values(event_name=event.event_name, place=event.place, start_time=event.start_time, end_time=event.end_time, registered_user=event.registered_users)
+    query = events.insert().values(event_name=event.event_name, place=event.place, start_time=event.start_time, end_time=event.end_time, registered_users=event.registered_users)
     event_id = await database.execute(query)
-    return {**event.dict, "id": event_id}
+    return {**event.dict(), "id": event_id}
 
 # GET: 現在進行中のイベントを獲得
 @app.get("/events/active", response_model=List[EventOut])
