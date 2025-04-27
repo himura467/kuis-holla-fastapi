@@ -2,6 +2,7 @@
 import os
 from datetime import datetime, timedelta
 from typing import List, Optional
+from starlette.middleware.cors import CORSMiddleware
 
 from databases import Database
 
@@ -46,6 +47,14 @@ pwd_context = CryptContext(
 )  # パスワードハッシュ用
 
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,   # 追記により追加
+    allow_methods=["*"],      # 追記により追加
+    allow_headers=["*"]       # 追記により追加
+)
 
 DATABASE_URL = "sqlite:///./database.db"  # 同じディレクトリ内のtest2.dbファイル
 database = Database(DATABASE_URL)
