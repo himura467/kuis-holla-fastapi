@@ -8,8 +8,9 @@ from databases import Database
 
 # secret key の環境変数から読み取り################################################
 from dotenv import load_dotenv  # .envファイルを読み取るためのimport
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, File, UploadFile
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi.responses import FileResponse
 from jose import JWTError, jwt
 
 # 認証・ハッシュ・トークン生成
@@ -29,6 +30,8 @@ from sqlalchemy import (
 )
 
 from prompt import generate_dummy_topic  # ← 追加
+
+from save_image import save_image_locally
 
 load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY") or "dummy-secret"
@@ -101,6 +104,7 @@ users = Table(
     Column("languages", JSON, nullable=True),
     Column("status", Integer, nullable=True),
     Column("talk_times", Integer, nullable=True),
+    Column("image_path", String, nullable=True),
 )
 
 events = Table(
@@ -501,3 +505,26 @@ async def generate_topic(current_user: dict = Depends(get_current_user)):
     generated_topic = generate_dummy_topic(name, department, hobbies, hometown)
 
     return {"suggested_topic": generated_topic}
+
+@app.post("/users/{user_id}/upload_image")
+async def upload_image(user_id: int, file: UploadFile = File(...)):
+    query = users.select().where(users.c.id == user_id)
+    user = await database.fetch_one(query)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    image_path = save_image_locally(file, user_id)
+
+    update_query = users.update().where(users.c.id == user_id).values(image_path=image_path)
+    await database.execute(update_query)
+
+    return {"message": "Image uploaded successfully", "image_path": image_path}
+
+@app.get("/users/{user_id}/image")
+async def get_user_image(user_id: int):
+    query = users.select().where(users.c.id == user_id)
+    user = await database.fetch_one(query)
+    if user is None or not user["image_path"]:
+        raise HTTPException(status_code=404, detail="Image not found")
+    
+    return FileResponse(user["image_path"])
