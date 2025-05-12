@@ -506,25 +506,45 @@ async def generate_topic(current_user: dict = Depends(get_current_user)):
 
     return {"suggested_topic": generated_topic}
 
+
 @app.post("/users/{user_id}/upload_image")
 async def upload_image(user_id: int, file: UploadFile = File(...)):
+    # ユーザーの存在確認
     query = users.select().where(users.c.id == user_id)
     user = await database.fetch_one(query)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
 
+    # 画像保存
     image_path = save_image_locally(file, user_id)
 
+    # 画像パスをデータベースに保存
     update_query = users.update().where(users.c.id == user_id).values(image_path=image_path)
     await database.execute(update_query)
 
     return {"message": "Image uploaded successfully", "image_path": image_path}
 
+#アップロード後、画像のパスが users テーブルの image_path カラムに保存される。
 @app.get("/users/{user_id}/image")
 async def get_user_image(user_id: int):
+    # ユーザーの画像パスを取得
     query = users.select().where(users.c.id == user_id)
     user = await database.fetch_one(query)
     if user is None or not user["image_path"]:
         raise HTTPException(status_code=404, detail="Image not found")
     
-    return FileResponse(user["image_path"])
+    # 画像ファイルが存在するか確認
+    image_path = user["image_path"]
+    if not os.path.exists(image_path):
+        raise HTTPException(status_code=404, detail="Image file not found")
+
+    # 画像を返す
+    return FileResponse(image_path)
+
+#とりあえず画像をUploaded_imagesに追加。(あまり良くない)
+@app.post("/upload/")
+async def upload_file(file: UploadFile = File(...)):
+    # ファイルの保存
+    file_path = save_image_locally(file)
+    
+    return {"info": f"file '{file.filename}' saved at '{file_path}'"}

@@ -1,15 +1,29 @@
+from fastapi import UploadFile, File, HTTPException
+from fastapi.responses import FileResponse
 import os
-from uuid import uuid4
 import shutil
-from fastapi import UploadFile
+from uuid import uuid4
 
 UPLOAD_DIR = "uploaded_images"
-os.makedirs(UPLOAD_DIR, exist_ok=True)
+
+# 保存先ディレクトリが存在しない場合は作成
+if not os.path.exists(UPLOAD_DIR):
+    os.makedirs(UPLOAD_DIR)
 
 def save_image_locally(file: UploadFile, user_id: int) -> str:
-    ext = file.filename.split(".")[-1]
+    # 拡張子の確認（画像ファイルかどうか）
+    ext = file.filename.split(".")[-1].lower()
+    allowed_extensions = ["jpg", "jpeg", "png", "gif"]
+
+    if ext not in allowed_extensions:
+        raise HTTPException(status_code=400, detail="Invalid file type. Only JPG, JPEG, PNG, and GIF are allowed.")
+    
+    # ユニークなファイル名を作成
     unique_name = f"user_{user_id}_{uuid4().hex[:8]}.{ext}"
-    path = os.path.join(UPLOAD_DIR, unique_name)
-    with open(path, "wb") as buffer:
+    file_path = os.path.join(UPLOAD_DIR, unique_name)
+
+    # ファイル保存
+    with open(file_path, "wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-    return path
+
+    return file_path
