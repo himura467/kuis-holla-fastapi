@@ -25,6 +25,7 @@ from sqlalchemy import (
     MetaData,
     String,
     Table,
+    and_,
     create_engine,
 )
 
@@ -100,7 +101,8 @@ users = Table(
     Column("hometown", String, nullable=True),
     Column("languages", JSON, nullable=True),
     Column("status", Integer, nullable=True),
-    Column("talk_times", Integer, nullable=True),
+    Column("talked_count", Integer, nullable=True),
+    Column("role", String, nullable=False),
 )
 
 events = Table(
@@ -112,6 +114,7 @@ events = Table(
     Column("start_time", DateTime, nullable=True),
     Column("end_time", DateTime, nullable=True),
     Column("registered_users", JSON, nullable=True),
+    Column("creater", String, nullable=False),
 )
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
@@ -193,6 +196,16 @@ class EventIn(BaseModel):
 class EventOut(BaseModel):
     id: int
     event_name: str
+
+
+class UserChange(BaseModel):
+    name: Optional[str] = None
+    password: Optional[str] = None
+    gender: Optional[str] = None
+    department: Optional[str] = None
+    hobbies: Optional[List[str]] = None
+    hometown: Optional[str] = None
+    languages: Optional[List[str]] = None
 
 
 # トークン検証用の関数
@@ -318,6 +331,7 @@ async def register_user(user: UserCreate):
         hometown=user.hometown,
         languages=user.languages,
         status=0,
+        role="participants",
     )
 
     user_id = await database.execute(query)
@@ -334,8 +348,22 @@ async def register_user(user: UserCreate):
 # }
 
 
+@app.post("/register/admin", response_model=UserOut)  ##登録用POST
+async def register_user_admin(user: UserCreate):
+    hashed_pw = hash_password(user.password)
+
+    query = users.insert().values(
+        name=user.name,
+        hashed_password=hashed_pw,
+        role="participants",
+    )
+
+    user_id = await database.execute(query)
+    return {**user.dict(exclude={"password"}), "id": user_id}
+
+
 @app.put("/users/{user_id}", response_model=UserOut)
-async def update_user(user_id: int, user: UserIn):
+async def update_user(user_id: int, user: UserChange = Body(...)):
     # 対象のユーザーが存在するか確認
     query = users.select().where(users.c.id == user_id)
     existing_user = await database.fetch_one(query)
@@ -343,11 +371,18 @@ async def update_user(user_id: int, user: UserIn):
         raise HTTPException(status_code=404, detail="User not found")
 
     # 更新クエリを発行
-    update_query = users.update().where(users.c.id == user_id).values(name=user.name)
+    update_data = user.dict(exclude_unset=True)
+    if "password" in update_data:
+        update_data["hashed_password"] = hash_password(update_data.pop("password"))
+    if update_data:
+        update_query = users.update().where(users.c.id == user_id).values(**update_data)
+        await database.execute(update_query)
+
     await database.execute(update_query)
 
     # 更新後の情報を取得して返す
-    return {**user.dict(), "id": user_id}
+    updated_user = await database.fetch_one(users.select().where(users.c.id == user_id))
+    return updated_user
 
 
 # リクエスト
@@ -393,16 +428,17 @@ async def delete_user(user_id: int):
 
 # POST: イベント登録
 @app.post("/events/register", response_model=EventOut)
-async def register_event(event: EventCreate):
+async def register_event(event: EventCreate, current_user: dict = Depends(get_current_user)):
     query = events.insert().values(
         event_name=event.event_name,
         place=event.place,
         start_time=event.start_time,
         end_time=event.end_time,
         registered_users=event.registered_users,
+        creater=current_user["name"],
     )
     event_id = await database.execute(query)
-    return {**event.dict(), "id": event_id}
+    return {**event.dict(), "id": event_id, "creater": current_user["id"]}
 
 
 # GET: 現在進行中のイベントを獲得
@@ -439,6 +475,16 @@ async def get_my_event(current_user: dict = Depends(get_current_user)):
         raise HTTPException(status_code=404, detail="No events found")
     return user_events
 
+# GET: 現在のユーザーがcreateしたイベントを獲得
+@app.get("/events/creater", response_model=List[EventOut])
+async def get_my_event(current_user: dict = Depends(get_current_user)):
+    like_pattern = f'%{current_user["name"]}%'
+    query = events.select().where(events.c.creater.like(like_pattern))
+    user_events = await database.fetch_all(query)
+    if not user_events:
+        raise HTTPException(status_code=404, detail="No events found")
+    return user_events
+
 
 # PUT: イベント更新
 @app.put("/events/{event_id}", response_model=EventOut)
@@ -468,6 +514,27 @@ async def delete_event(event_id: int):
     await database.execute(delete_query)
     return existing_event
 
+# イベント参加
+@app.post("/events/{event_id}/join", response_model=EventOut)
+async def join_event(event_id: int, current_user: dict = Depends(get_current_user)):
+    query = events.select().where(events.c.id == event_id)
+    event = await database.fetch_one(query)
+    if event is None:
+        raise HTTPException(status_code=404, detail="Event not found")
+    
+    registered_users = event["registered_users"] or []
+    if current_user["id"] not in registered_users:
+        registered_users.append(current_user["id"])
+        update_query = (
+            events.update()
+            .where(events.c.id == event_id)
+            .values(registered_users=registered_users)
+        )
+        await database.execute(update_query)
+
+    updated_event = await database.fetch_one(events.select().where(events.c.id == event_id))
+    return updated_event
+
 
 #####話しかけられた回数を更新するためのエンドポイントを追加
 @app.post("/users/{user_id}/increment_talk_count")
@@ -484,6 +551,34 @@ async def increment_talked_count(user_id: int):
     await database.execute(update_query)
     return {"id": user_id, "talked_count": new_count}
 
+@app.get("/users/{user_id}/get_list", response_model=List[int])
+async def get_list(user_id: int):
+    query = users.select().where(
+        and_(users.c.status == 1),
+        and_(users.c.user_id != user_id)
+    ).order_by(users.c.talked_count.asc())
+    user_list = await database.fetch_all(query)
+    user_ids = [user["id"] for user in user_list]
+    return user_ids
+
+@app.get("/users/{user_id}/get_status", response_model=int)
+async def get_list(user_id: int):
+    query = users.select(users.c.status).where(users.c.user_id == user_id)
+    result = await database.fetch_one(query)
+    return result["status"]
+
+@app.put("/users/{user_id}/status", response_model=UserOut)
+async def update_event(user_id: int, user: UserIn):
+    await database.connect()
+    query = users.select().where(users.c.id == user_id)
+    existing_user = await database.fetch_one(query)
+    if existing_user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    update_query = (
+        users.update().where(users.c.id == user_id).values(1)
+    )
+    await database.execute(update_query)
+    return existing_user
 
 ####################################chatGPTによるサジェスト
 
