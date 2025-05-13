@@ -545,6 +545,6 @@ async def get_user_image(user_id: int):
 @app.post("/upload/")
 async def upload_file(file: UploadFile = File(...)):
     # ファイルの保存
-    file_path = save_image_locally(file)# ファイル形式はsave_image_locallyが指定。"jpg", "jpeg", "png", "gif"
+    file_path = save_image_locally(file,0)# ファイル形式はsave_image_locallyが指定。"jpg", "jpeg", "png", "gif"
     
     return {"info": f"file '{file.filename}' saved at '{file_path}'"}
