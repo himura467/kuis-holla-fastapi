@@ -1,9 +1,10 @@
 # FastAPI本体とセキュリティ関連
 import os
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from databases import Database
+from databases.backends.sqlite import Record  # またはPostgreSQLなら対応するRecord型
 
 # secret key の環境変数から読み取り################################################
 from dotenv import load_dotenv  # .envファイルを読み取るためのimport
@@ -31,7 +32,7 @@ from sqlalchemy import (
 )
 from starlette.middleware.cors import CORSMiddleware
 
-from prompt import generate_dummy_topic  # ← 追加
+from prompt import generate_openai_topic  # ← 追加
 from save_image import save_image_locally
 
 load_dotenv()
@@ -657,19 +658,50 @@ async def update_status(user_id: int):
 ####################################chatGPTによるサジェスト
 
 
-@app.post("/topic/generate")
-async def generate_topic(current_user: dict = Depends(get_current_user)):
-    name = current_user["name"]
-    # gender = current_user["gender"] or "不明"
-    department = current_user["department"] or "未設定"
-    hobbies = current_user["hobbies"] or []
-    hometown = current_user["hometown"] or "不明"
-    # languages = current_user["languages"] or "不明"
+@app.post("/topic/generate")  ##自分の情報を入力して、話題を提案する
+async def generate_topic(current_user: Record = Depends(get_current_user)):
+    user_dict = cast(Dict[str, Any], dict(current_user))
 
-    # 外部に分離された関数を使って話題生成
-    generated_topic = generate_dummy_topic(name, department, hobbies, hometown)
+    name = user_dict.get("name", "名無し")
+    department = user_dict.get("department", "不明")
+    hobbies = user_dict.get("hobbies", [])
+    hometown = user_dict.get("hometown", "不明")
 
-    return {"suggested_topic": generated_topic}
+    if not isinstance(hobbies, list):
+        hobbies = [hobbies]
+
+    prompt = f"{name}さんは{department}出身で、趣味は{', '.join(hobbies)}。{hometown}から来ました。この人に合う話題を一つ考えてください。"
+    topic = generate_openai_topic(prompt)
+    return {"suggested_topic": topic}
+
+
+@app.post("/topic/openai/{target_user_id}")
+async def generate_conversation_topic(
+    target_user_id: int, current_user: Record = Depends(get_current_user)
+):
+    # 対象ユーザーの取得
+    query = users.select().where(users.c.id == target_user_id)
+    target_user = await database.fetch_one(query)
+    if target_user is None:
+        raise HTTPException(status_code=404, detail="Target user not found")
+
+    # Record を dict にキャスト
+    me = cast(Dict[str, Any], dict(current_user))
+    target = cast(Dict[str, Any], dict(target_user))
+
+    # プロンプト生成
+    prompt = (
+        f"あなた（{me['name']}）は {me.get('department', '不明')} に所属し、"
+        f"趣味は {', '.join(me.get('hobbies', []) or [])}、"
+        f"{me.get('hometown', '不明')} 出身の人です。\n\n"
+        f"相手（{target['name']}）は {target.get('department', '不明')} 所属、"
+        f"趣味は {', '.join(target.get('hobbies', []) or [])}、"
+        f"{target.get('hometown', '不明')} 出身です。\n\n"
+        "この情報をもとに、自然な会話のきっかけとなる話題を1つ提案してください。また、この際、リストを提示するような感じで、あくまで会話の主体はユーザで、話題のヒントとなる形で教えてください。相槌はいらないので、答えだけ教えてください"
+    )
+
+    topic = generate_openai_topic(prompt)
+    return {"suggested_topic": topic}
 
 
 @app.post("/users/{user_id}/upload_image")
