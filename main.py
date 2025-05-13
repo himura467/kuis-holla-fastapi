@@ -509,33 +509,30 @@ async def generate_topic(current_user: Record = Depends(get_current_user)):
     return {"suggested_topic": topic}
 
 
-@app.post(
-    "/topic/openai/{target_user_id}"  ##自分と相手の情報を入力して、話題を生成する。
-)  # このエンドポイントは、自分と相手の情報を照らし合わせて話題を提案する。
+@app.post("/topic/openai/{target_user_id}")
 async def generate_conversation_topic(
-    target_user_id: int, current_user: dict = Depends(get_current_user)
+    target_user_id: int, current_user: Record = Depends(get_current_user)
 ):
-    # 話しかけられる側（対象ユーザー）を取得
+    # 対象ユーザーの取得
     query = users.select().where(users.c.id == target_user_id)
     target_user = await database.fetch_one(query)
     if target_user is None:
         raise HTTPException(status_code=404, detail="Target user not found")
 
-    # 話しかける側（ログイン中のユーザー）の情報
-    me = current_user
+    # Record を dict にキャスト
+    me = cast(Dict[str, Any], dict(current_user))
+    target = cast(Dict[str, Any], dict(target_user))
 
-    # 両者の情報を使ってプロンプトを生成
+    # プロンプト生成
     prompt = (
         f"あなた（{me['name']}）は {me.get('department', '不明')} に所属し、"
-        f"趣味は {', '.join(me.get('hobbies', [])) or '特になし'}、"
+        f"趣味は {', '.join(me.get('hobbies', []) or [])}、"
         f"{me.get('hometown', '不明')} 出身の人です。\n\n"
-        f"相手（{target_user['name']}）は {target_user.get('department', '不明')} 所属、"  # type: ignore
-        f"趣味は {', '.join(target_user.get('hobbies', [])) or '特になし'}、"  # type: ignore
-        f"{target_user.get('hometown', '不明')} 出身です。\n\n"  # type: ignore
-        "この情報をもとに、自然な会話のきっかけとなる話題を1つ提案してください。"
+        f"相手（{target['name']}）は {target.get('department', '不明')} 所属、"
+        f"趣味は {', '.join(target.get('hobbies', []) or [])}、"
+        f"{target.get('hometown', '不明')} 出身です。\n\n"
+        "この情報をもとに、自然な会話のきっかけとなる話題を1つ提案してください。また、この際、リストを提示するような感じで、あくまで会話の主体はユーザで、話題のヒントとなる形で教えてください。相槌はいらないので、答えだけ教えてください"
     )
-
-    from prompt import generate_openai_topic  # 外部ファイルから呼び出し
 
     topic = generate_openai_topic(prompt)
     return {"suggested_topic": topic}
