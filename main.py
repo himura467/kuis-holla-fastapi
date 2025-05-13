@@ -598,10 +598,10 @@ async def get_recommended_list(current_user: dict = Depends(get_current_user)):
 async def get_status(user_id: int):
     query = select(users.c.status).where(users.c.id == user_id)
     result = await database.fetch_one(query)
-    
+
     if result is None:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     return result["status"]
 
 
