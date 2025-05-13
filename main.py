@@ -7,11 +7,7 @@ from databases import Database
 
 # secret key の環境変数から読み取り################################################
 from dotenv import load_dotenv  # .envファイルを読み取るためのimport
-<<<<<<< HEAD
-from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
-=======
-from fastapi import Body, Depends, FastAPI, File, HTTPException, UploadFile, Response, Request
->>>>>>> 92c61856dc687c8efb4a8f54bc0a6e11cc972e96
+from fastapi import Body, Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
