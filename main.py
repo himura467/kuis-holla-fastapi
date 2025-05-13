@@ -7,7 +7,7 @@ from databases import Database
 
 # secret key の環境変数から読み取り################################################
 from dotenv import load_dotenv  # .envファイルを読み取るためのimport
-from fastapi import Body, Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import Body, Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
@@ -54,10 +54,10 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,  # 追記により追加
-    allow_methods=["*"],  # 追記により追加
-    allow_headers=["*"],  # 追記により追加
+    allow_origins=["http://localhost:3000"],  # ← "*" は NG
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 DATABASE_URL = "sqlite:///./database.db"  # 同じディレクトリ内のtest2.dbファイル
@@ -233,7 +233,11 @@ class UserInfoOut(BaseModel):
 
 
 # トークン検証用の関数
-async def get_current_user(token: str = Depends(oauth2_scheme)):
+async def get_current_user(request: Request):
+    token = request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
@@ -242,7 +246,6 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    # ユーザー検索
     query = users.select().where(users.c.name == username)
     user = await database.fetch_one(query)
     if user is None:
@@ -265,8 +268,8 @@ async def shutdown():
     await database.disconnect()
 
 
-@app.post("/login")  # ログイン.成功すると、アクセストークンをレスポンスとして返す。
-async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+@app.post("/login")
+async def login(response: Response, form_data: OAuth2PasswordRequestForm = Depends()):
     query = users.select().where(users.c.name == form_data.username)
     db_user = await database.fetch_one(query)
     if db_user is None or not verify_password(
@@ -275,7 +278,20 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     access_token = create_access_token(data={"sub": form_data.username})
-    return {"access_token": access_token, "token_type": "bearer"}
+
+    # Cookie にセット（secure, samesite は環境に応じて）
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=False,  # ローカル開発なら False、本番では True
+        samesite="lax",  # cross-site の場合は "None" + secure=True
+        max_age=1800,
+        expires=1800,
+        path="/",
+    )
+
+    return {"message": "Login successful"}
 
 
 # GET: ユーザー一覧取得
@@ -300,8 +316,26 @@ async def get_users():
 # }
 # 認証つきエンドポイント
 @app.get("/users/me", response_model=UserOut)
-async def read_current_user(current_user: dict = Depends(get_current_user)):
-    return current_user
+async def read_current_user(request: Request):
+    token = request.cookies.get("access_token")
+    print(">>> Cookie access_token:", token)
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    query = users.select().where(users.c.name == username)
+    user = await database.fetch_one(query)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return user
 
 
 @app.get("/users/{user_id}", response_model=UserInfoOut)  # (ユーザ個別情報)
