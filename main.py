@@ -1,13 +1,15 @@
 # FastAPI本体とセキュリティ関連
 import os
 from datetime import datetime, timedelta
-from typing import List, Optional
+from typing import Any, Dict, List, Optional, cast
 
 from databases import Database
+from databases.backends.sqlite import Record  # またはPostgreSQLなら対応するRecord型
 
 # secret key の環境変数から読み取り################################################
 from dotenv import load_dotenv  # .envファイルを読み取るためのimport
-from fastapi import Body, Depends, FastAPI, File, HTTPException, UploadFile, Query
+
+from fastapi import Body, Depends, FastAPI, File, HTTPException, Request, Response, UploadFile, Query
 from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
@@ -31,7 +33,7 @@ from sqlalchemy import (
 )
 from starlette.middleware.cors import CORSMiddleware
 
-from prompt import generate_dummy_topic  # ← 追加
+from prompt import generate_openai_topic  # ← 追加
 from save_image import save_image_locally
 
 load_dotenv()
@@ -54,10 +56,10 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,  # 追記により追加
-    allow_methods=["*"],  # 追記により追加
-    allow_headers=["*"],  # 追記により追加
+    allow_origins=["http://localhost:3000"],  # ← "*" は NG
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 DATABASE_URL = "sqlite:///./database.db"  # 同じディレクトリ内のtest2.dbファイル
@@ -233,7 +235,11 @@ class UserInfoOut(BaseModel):
 
 
 # トークン検証用の関数
-async def get_current_user(token: str = Depends(oauth2_scheme)):
+async def get_current_user(request: Request):
+    token = request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
@@ -242,7 +248,6 @@ async def get_current_user(token: str = Depends(oauth2_scheme)):
     except JWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
-    # ユーザー検索
     query = users.select().where(users.c.name == username)
     user = await database.fetch_one(query)
     if user is None:
@@ -265,8 +270,8 @@ async def shutdown():
     await database.disconnect()
 
 
-@app.post("/login")  # ログイン.成功すると、アクセストークンをレスポンスとして返す。
-async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+@app.post("/login")
+async def login(response: Response, form_data: OAuth2PasswordRequestForm = Depends()):
     query = users.select().where(users.c.name == form_data.username)
     db_user = await database.fetch_one(query)
     if db_user is None or not verify_password(
@@ -275,7 +280,20 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     access_token = create_access_token(data={"sub": form_data.username})
-    return {"access_token": access_token, "token_type": "bearer"}
+
+    # Cookie にセット（secure, samesite は環境に応じて）
+    response.set_cookie(
+        key="access_token",
+        value=access_token,
+        httponly=True,
+        secure=False,  # ローカル開発なら False、本番では True
+        samesite="lax",  # cross-site の場合は "None" + secure=True
+        max_age=1800,
+        expires=1800,
+        path="/",
+    )
+
+    return {"message": "Login successful"}
 
 
 # GET: ユーザー一覧取得
@@ -300,8 +318,26 @@ async def get_users():
 # }
 # 認証つきエンドポイント
 @app.get("/users/me", response_model=UserOut)
-async def read_current_user(current_user: dict = Depends(get_current_user)):
-    return current_user
+async def read_current_user(request: Request):
+    token = request.cookies.get("access_token")
+    print(">>> Cookie access_token:", token)
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username: str = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    query = users.select().where(users.c.name == username)
+    user = await database.fetch_one(query)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    return user
 
 
 @app.get("/users/{user_id}", response_model=UserInfoOut)  # (ユーザ個別情報)
@@ -658,19 +694,50 @@ async def update_status(user_id: int):
 ####################################chatGPTによるサジェスト
 
 
-@app.post("/topic/generate")
-async def generate_topic(current_user: dict = Depends(get_current_user)):
-    name = current_user["name"]
-    # gender = current_user["gender"] or "不明"
-    department = current_user["department"] or "未設定"
-    hobbies = current_user["hobbies"] or []
-    hometown = current_user["hometown"] or "不明"
-    # languages = current_user["languages"] or "不明"
+@app.post("/topic/generate")  ##自分の情報を入力して、話題を提案する
+async def generate_topic(current_user: Record = Depends(get_current_user)):
+    user_dict = cast(Dict[str, Any], dict(current_user))
 
-    # 外部に分離された関数を使って話題生成
-    generated_topic = generate_dummy_topic(name, department, hobbies, hometown)
+    name = user_dict.get("name", "名無し")
+    department = user_dict.get("department", "不明")
+    hobbies = user_dict.get("hobbies", [])
+    hometown = user_dict.get("hometown", "不明")
 
-    return {"suggested_topic": generated_topic}
+    if not isinstance(hobbies, list):
+        hobbies = [hobbies]
+
+    prompt = f"{name}さんは{department}出身で、趣味は{', '.join(hobbies)}。{hometown}から来ました。この人に合う話題を一つ考えてください。"
+    topic = generate_openai_topic(prompt)
+    return {"suggested_topic": topic}
+
+
+@app.post("/topic/openai/{target_user_id}")
+async def generate_conversation_topic(
+    target_user_id: int, current_user: Record = Depends(get_current_user)
+):
+    # 対象ユーザーの取得
+    query = users.select().where(users.c.id == target_user_id)
+    target_user = await database.fetch_one(query)
+    if target_user is None:
+        raise HTTPException(status_code=404, detail="Target user not found")
+
+    # Record を dict にキャスト
+    me = cast(Dict[str, Any], dict(current_user))
+    target = cast(Dict[str, Any], dict(target_user))
+
+    # プロンプト生成
+    prompt = (
+        f"あなた（{me['name']}）は {me.get('department', '不明')} に所属し、"
+        f"趣味は {', '.join(me.get('hobbies', []) or [])}、"
+        f"{me.get('hometown', '不明')} 出身の人です。\n\n"
+        f"相手（{target['name']}）は {target.get('department', '不明')} 所属、"
+        f"趣味は {', '.join(target.get('hobbies', []) or [])}、"
+        f"{target.get('hometown', '不明')} 出身です。\n\n"
+        "この情報をもとに、自然な会話のきっかけとなる話題を1つ提案してください。また、この際、リストを提示するような感じで、あくまで会話の主体はユーザで、話題のヒントとなる形で教えてください。相槌はいらないので、答えだけ教えてください"
+    )
+
+    topic = generate_openai_topic(prompt)
+    return {"suggested_topic": topic}
 
 
 @app.post("/users/{user_id}/upload_image")

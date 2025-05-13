@@ -10,3 +10,4 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - SECRET_KEY=your_super_secret_key_here
+      - OPENAI_API_KEY

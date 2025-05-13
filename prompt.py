@@ -1,9 +1,10 @@
 # prompt.py
 
 from typing import List
+import os
+from openai import OpenAI
 
-# import openai
-
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 def generate_dummy_topic(
     name: str, department: str, hobby: List[str], hometown: str
@@ -14,8 +15,16 @@ def generate_dummy_topic(
     )
 
 
-# def generate_openai_topic(prompt: str) -> str:
-#     response = openai.ChatCompletion.create(
-#         model="gpt-3.5-turbo", messages=[{"role": "user", "content": prompt}]
-#     )
-#     return response.choices[0].message.content
+def generate_openai_topic(prompt: str) -> str:
+    response = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    message = response.choices[0].message
+    content = message.content
+
+    if content is None:
+        raise ValueError("OpenAI returned no content.")
+
+    return content
