@@ -1,9 +1,10 @@
 # prompt.py
 
 from typing import List
+import os
+import openai
 
-# import openai
-
+openai.api_key = os.getenv("OPENAI_API_KEY") # .envのAPIキーを取得して利用
 
 def generate_dummy_topic(
     name: str, department: str, hobby: List[str], hometown: str
@@ -14,8 +15,8 @@ def generate_dummy_topic(
     )
 
 
-# def generate_openai_topic(prompt: str) -> str:
-#     response = openai.ChatCompletion.create(
-#         model="gpt-3.5-turbo", messages=[{"role": "user", "content": prompt}]
-#     )
-#     return response.choices[0].message.content
+def generate_openai_topic(prompt: str) -> str:
+     response = openai.ChatCompletion.create( # type: ignore
+        model="gpt-3.5-turbo", messages=[{"role": "user", "content": prompt}]
+     )
+     return response.choices[0].message.content
