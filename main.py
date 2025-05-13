@@ -542,9 +542,11 @@ async def get_user_image(user_id: int):
     return FileResponse(image_path)
 
 #とりあえず画像をUploaded_imagesに追加。
+
 @app.post("/upload/")
 async def upload_file(file: UploadFile = File(...)):
     # ファイルの保存
     file_path = save_image_locally(file, 0)  # File format specified by save_image_locally
+    
     
     return {"info": f"file '{file.filename}' saved at '{file_path}'"}
