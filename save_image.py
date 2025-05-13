@@ -12,6 +12,10 @@ if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
 
 def save_image_locally(file: UploadFile, user_id: int) -> str:
+    # Check if filename is None
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="Filename cannot be empty.")
+
     # 拡張子の確認（画像ファイルかどうか）
     ext = file.filename.split(".")[-1].lower()
     allowed_extensions = ["jpg", "jpeg", "png", "gif"]
