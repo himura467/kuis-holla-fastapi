@@ -514,7 +514,7 @@ async def upload_image(user_id: int, file: UploadFile = File(...)):
     user = await database.fetch_one(query)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
-
+    # ユーザーがいない場合のエラー処理
     # 画像保存
     image_path = save_image_locally(file, user_id)
 
@@ -541,10 +541,10 @@ async def get_user_image(user_id: int):
     # 画像を返す
     return FileResponse(image_path)
 
-#とりあえず画像をUploaded_imagesに追加。(あまり良くない)
+#とりあえず画像をUploaded_imagesに追加。
 @app.post("/upload/")
 async def upload_file(file: UploadFile = File(...)):
     # ファイルの保存
-    file_path = save_image_locally(file)
+    file_path = save_image_locally(file)# ファイル形式はsave_image_locallyが指定。"jpg", "jpeg", "png", "gif"
     
     return {"info": f"file '{file.filename}' saved at '{file_path}'"}
