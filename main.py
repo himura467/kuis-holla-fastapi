@@ -8,7 +8,7 @@ from databases import Database
 
 # secret key の環境変数から読み取り################################################
 from dotenv import load_dotenv  # .envファイルを読み取るためのimport
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Body
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 
@@ -27,6 +27,7 @@ from sqlalchemy import (
     Table,
     and_,
     create_engine,
+    select,
 )
 
 from prompt import generate_dummy_topic  # ← 追加
@@ -132,7 +133,6 @@ metadata.create_all(
 class UserCreate(BaseModel):  # 登録用
     name: str
     password: str
-
     gender: str
     department: str
     hobbies: List[str]  # not sure about this one
@@ -197,6 +197,15 @@ class EventOut(BaseModel):
     id: int
     event_name: str
 
+class EventInfoOut(BaseModel):
+    id: int
+    event_name: str
+    place: str
+    start_time: datetime
+    end_time: datetime
+    registered_users: List[str]
+    creater: str
+
 
 class UserChange(BaseModel):
     name: Optional[str] = None
@@ -206,6 +215,16 @@ class UserChange(BaseModel):
     hobbies: Optional[List[str]] = None
     hometown: Optional[str] = None
     languages: Optional[List[str]] = None
+
+class UserInfoOut(BaseModel):
+    id: int
+    name: str
+    gender: str
+    department: str
+    hobbies: List[str]
+    hometown: str
+    languages: List[str]
+    status: int
 
 
 # トークン検証用の関数
@@ -257,7 +276,7 @@ async def login(form_data: OAuth2PasswordRequestForm = Depends()):
 # GET: ユーザー一覧取得
 @app.get("/users", response_model=list[UserOut])  # (ユーザ全員の情報)
 async def get_users():
-    query = users.select()
+    query = select(users.c.id, users.c.name)
     return await database.fetch_all(query)
 
 
@@ -280,7 +299,7 @@ async def read_current_user(current_user: dict = Depends(get_current_user)):
     return current_user
 
 
-@app.get("/users/{user_id}", response_model=UserOut)  # (ユーザ個別情報)
+@app.get("/users/{user_id}", response_model=UserInfoOut)  # (ユーザ個別情報)
 async def get_user_by_id(user_id: int):
     query = users.select().where(users.c.id == user_id)
     user = await database.fetch_one(query)
@@ -355,14 +374,14 @@ async def register_user_admin(user: UserCreate):
     query = users.insert().values(
         name=user.name,
         hashed_password=hashed_pw,
-        role="participants",
+        role="admin",
     )
 
     user_id = await database.execute(query)
     return {**user.dict(exclude={"password"}), "id": user_id}
 
 
-@app.put("/users/{user_id}", response_model=UserOut)
+@app.put("/users/{user_id}", response_model=UserInfoOut)
 async def update_user(user_id: int, user: UserChange = Body(...)):
     # 対象のユーザーが存在するか確認
     query = users.select().where(users.c.id == user_id)
@@ -438,7 +457,7 @@ async def register_event(event: EventCreate, current_user: dict = Depends(get_cu
         creater=current_user["name"],
     )
     event_id = await database.execute(query)
-    return {**event.dict(), "id": event_id, "creater": current_user["id"]}
+    return {**event.dict(), "id": event_id}
 
 
 # GET: 現在進行中のイベントを獲得
@@ -454,7 +473,7 @@ async def get_active_events():
     return active_events
 
 
-# GET: UserIDで参加しているイベントを獲得
+# GET: UserNameで参加しているイベントを獲得
 @app.get("/events/user/{user_name}", response_model=List[EventOut])
 async def get_user_events(user_name: str):
     like_pattern = f'%"{user_name}"%'
@@ -487,20 +506,19 @@ async def get_my_event(current_user: dict = Depends(get_current_user)):
 
 
 # PUT: イベント更新
-@app.put("/events/{event_id}", response_model=EventOut)
-async def update_event(event_id: int, event: EventIn):
-    await database.connect()
+@app.put("/events/{event_id}", response_model=EventInfoOut)
+async def update_event(event_id: int, event: EventIn = Body(...)):
     query = events.select().where(events.c.id == event_id)
     existing_event = await database.fetch_one(query)
     if existing_event is None:
         raise HTTPException(status_code=404, detail="Event not found")
     update_data = event.dict(exclude_unset=True)
     if update_data:
-        update_query = (
-            events.update().where(events.c.id == event_id).values(**update_data)
-        )
+        update_query = events.update().where(events.c.id == event_id).values(**update_data)
         await database.execute(update_query)
-    return existing_event
+    await database.execute(update_query)
+    updated_event = await database.fetch_one(events.select().where(events.c.id == event_id))
+    return updated_event
 
 
 # DELETE: イベントをIDで削除
@@ -515,7 +533,7 @@ async def delete_event(event_id: int):
     return existing_event
 
 # イベント参加
-@app.post("/events/{event_id}/join", response_model=EventOut)
+@app.post("/events/{event_id}/join", response_model=EventInfoOut)
 async def join_event(event_id: int, current_user: dict = Depends(get_current_user)):
     query = events.select().where(events.c.id == event_id)
     event = await database.fetch_one(query)
@@ -523,8 +541,8 @@ async def join_event(event_id: int, current_user: dict = Depends(get_current_use
         raise HTTPException(status_code=404, detail="Event not found")
     
     registered_users = event["registered_users"] or []
-    if current_user["id"] not in registered_users:
-        registered_users.append(current_user["id"])
+    if current_user["name"] not in registered_users:
+        registered_users.append(str(current_user["name"]))
         update_query = (
             events.update()
             .where(events.c.id == event_id)
@@ -551,11 +569,13 @@ async def increment_talked_count(user_id: int):
     await database.execute(update_query)
     return {"id": user_id, "talked_count": new_count}
 
-@app.get("/users/{user_id}/get_list", response_model=List[int])
-async def get_list(user_id: int):
+@app.get("/get_recommended_list", response_model=List[int])
+async def get_recommended_list(current_user: dict = Depends(get_current_user)):
     query = users.select().where(
-        and_(users.c.status == 1),
-        and_(users.c.user_id != user_id)
+        and_(
+            users.c.status == 1,
+            users.c.id != current_user['id']
+        )
     ).order_by(users.c.talked_count.asc())
     user_list = await database.fetch_all(query)
     user_ids = [user["id"] for user in user_list]
@@ -563,19 +583,19 @@ async def get_list(user_id: int):
 
 @app.get("/users/{user_id}/get_status", response_model=int)
 async def get_list(user_id: int):
-    query = users.select(users.c.status).where(users.c.user_id == user_id)
+    query = select(users.c.status).where(users.c.id == user_id)
     result = await database.fetch_one(query)
     return result["status"]
 
 @app.put("/users/{user_id}/status", response_model=UserOut)
-async def update_event(user_id: int, user: UserIn):
+async def update_event(user_id: int):
     await database.connect()
     query = users.select().where(users.c.id == user_id)
     existing_user = await database.fetch_one(query)
     if existing_user is None:
         raise HTTPException(status_code=404, detail="User not found")
     update_query = (
-        users.update().where(users.c.id == user_id).values(1)
+        users.update().where(users.c.id == user_id).values(status=1)
     )
     await database.execute(update_query)
     return existing_user
