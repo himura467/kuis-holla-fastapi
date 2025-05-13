@@ -2,15 +2,14 @@
 import os
 from datetime import datetime, timedelta
 from typing import List, Optional
-from starlette.middleware.cors import CORSMiddleware
 
 from databases import Database
 
 # secret key の環境変数から読み取り################################################
 from dotenv import load_dotenv  # .envファイルを読み取るためのimport
-from fastapi import Depends, FastAPI, HTTPException, File, UploadFile
-from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
 from fastapi.responses import FileResponse
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 
 # 認証・ハッシュ・トークン生成
@@ -28,9 +27,9 @@ from sqlalchemy import (
     Table,
     create_engine,
 )
+from starlette.middleware.cors import CORSMiddleware
 
 from prompt import generate_dummy_topic  # ← 追加
-
 from save_image import save_image_locally
 
 load_dotenv()
@@ -54,9 +53,9 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,   # 追記により追加
-    allow_methods=["*"],      # 追記により追加
-    allow_headers=["*"]       # 追記により追加
+    allow_credentials=True,  # 追記により追加
+    allow_methods=["*"],  # 追記により追加
+    allow_headers=["*"],  # 追記により追加
 )
 
 DATABASE_URL = "sqlite:///./database.db"  # 同じディレクトリ内のtest2.dbファイル
@@ -519,12 +518,15 @@ async def upload_image(user_id: int, file: UploadFile = File(...)):
     image_path = save_image_locally(file, user_id)
 
     # 画像パスをデータベースに保存
-    update_query = users.update().where(users.c.id == user_id).values(image_path=image_path)
+    update_query = (
+        users.update().where(users.c.id == user_id).values(image_path=image_path)
+    )
     await database.execute(update_query)
 
     return {"message": "Image uploaded successfully", "image_path": image_path}
 
-#アップロード後、画像のパスが users テーブルの image_path カラムに保存される。
+
+# アップロード後、画像のパスが users テーブルの image_path カラムに保存される。
 @app.get("/users/{user_id}/image")
 async def get_user_image(user_id: int):
     # ユーザーの画像パスを取得
@@ -532,7 +534,7 @@ async def get_user_image(user_id: int):
     user = await database.fetch_one(query)
     if user is None or not user["image_path"]:
         raise HTTPException(status_code=404, detail="Image not found")
-    
+
     # 画像ファイルが存在するか確認
     image_path = user["image_path"]
     if not os.path.exists(image_path):
@@ -541,12 +543,15 @@ async def get_user_image(user_id: int):
     # 画像を返す
     return FileResponse(image_path)
 
-#とりあえず画像をUploaded_imagesに追加。
+
+# とりあえず画像をUploaded_imagesに追加。
+
 
 @app.post("/upload/")
 async def upload_file(file: UploadFile = File(...)):
     # ファイルの保存
-    file_path = save_image_locally(file, 0)  # File format specified by save_image_locally
-    
-    
+    file_path = save_image_locally(
+        file, 0
+    )  # File format specified by save_image_locally
+
     return {"info": f"file '{file.filename}' saved at '{file_path}'"}

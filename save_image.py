@@ -1,7 +1,8 @@
-from fastapi import UploadFile, HTTPException  # Updated import
 import os
 import shutil
 from uuid import uuid4
+
+from fastapi import HTTPException, UploadFile  # Updated import
 
 UPLOAD_DIR = "uploaded_images"
 
@@ -9,8 +10,9 @@ UPLOAD_DIR = "uploaded_images"
 if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
 
+
 def save_image_locally(file: UploadFile, user_id: int) -> str:
-    
+
     # Check if filename is None
     if not file.filename:
         raise HTTPException(status_code=400, detail="Filename cannot be empty.")
@@ -19,7 +21,10 @@ def save_image_locally(file: UploadFile, user_id: int) -> str:
     ext = file.filename.split(".")[-1].lower()
     allowed_extensions = ["jpg", "jpeg", "png", "gif"]
     if ext not in allowed_extensions:
-        raise HTTPException(status_code=400, detail="Invalid file type. Only JPG, JPEG, PNG, and GIF are allowed.")
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid file type. Only JPG, JPEG, PNG, and GIF are allowed.",
+        )
 
     # Create a unique filename
     unique_name = f"user_{user_id}_{uuid4().hex[:8]}.{ext}"
