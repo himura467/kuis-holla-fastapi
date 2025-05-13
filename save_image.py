@@ -1,15 +1,15 @@
 from fastapi import UploadFile, File, HTTPException
-from fastapi.responses import FileResponse
 import os
 import shutil
 from uuid import uuid4
 
 UPLOAD_DIR = "uploaded_images"
-#今はローカル環境に保存する設定
+# 今はローカル環境に保存する設定
 
 # 保存先ディレクトリが存在しない場合は作成
 if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
+
 
 def save_image_locally(file: UploadFile, user_id: int) -> str:
     # Check if filename is None
