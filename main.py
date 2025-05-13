@@ -7,7 +7,7 @@ from databases import Database
 
 # secret key の環境変数から読み取り################################################
 from dotenv import load_dotenv  # .envファイルを読み取るためのimport
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile, Response, Request
+from fastapi import Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
@@ -203,7 +203,7 @@ async def get_current_user(request: Request):
     token = request.cookies.get("access_token")
     if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
-    
+
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         username: str = payload.get("sub")
@@ -217,6 +217,7 @@ async def get_current_user(request: Request):
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
     return user
+
 
 ##############エンドポイント###############
 # エンドポイントとは、DBにアクセスするための窓口のようなもの
@@ -232,11 +233,14 @@ async def startup():
 async def shutdown():
     await database.disconnect()
 
+
 @app.post("/login")
 async def login(response: Response, form_data: OAuth2PasswordRequestForm = Depends()):
     query = users.select().where(users.c.name == form_data.username)
     db_user = await database.fetch_one(query)
-    if db_user is None or not verify_password(form_data.password, db_user["hashed_password"]):
+    if db_user is None or not verify_password(
+        form_data.password, db_user["hashed_password"]
+    ):
         raise HTTPException(status_code=401, detail="Invalid credentials")
 
     access_token = create_access_token(data={"sub": form_data.username})
@@ -246,14 +250,15 @@ async def login(response: Response, form_data: OAuth2PasswordRequestForm = Depen
         key="access_token",
         value=access_token,
         httponly=True,
-        secure=False,       # ローカル開発なら False、本番では True
-        samesite="Lax",     # cross-site の場合は "None" + secure=True
+        secure=False,  # ローカル開発なら False、本番では True
+        samesite="lax",  # cross-site の場合は "None" + secure=True
         max_age=1800,
         expires=1800,
         path="/",
     )
 
     return {"message": "Login successful"}
+
 
 # GET: ユーザー一覧取得
 @app.get("/users", response_model=list[UserOut])  # (ユーザ全員の情報)
