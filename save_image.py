@@ -15,7 +15,7 @@ def save_image_locally(file: UploadFile, user_id: int) -> str:
     # 拡張子の確認（画像ファイルかどうか）
     ext = file.filename.split(".")[-1].lower()
     allowed_extensions = ["jpg", "jpeg", "png", "gif"]
-
+    user_id = 0
     if ext not in allowed_extensions:
         raise HTTPException(status_code=400, detail="Invalid file type. Only JPG, JPEG, PNG, and GIF are allowed.")
     
