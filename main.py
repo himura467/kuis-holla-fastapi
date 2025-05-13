@@ -8,7 +8,8 @@ from databases.backends.sqlite import Record  # またはPostgreSQLなら対応�
 
 # secret key の環境変数から読み取り################################################
 from dotenv import load_dotenv  # .envファイルを読み取るためのimport
-from fastapi import Body, Depends, FastAPI, File, HTTPException, Request, Response, UploadFile
+
+from fastapi import Body, Depends, FastAPI, File, HTTPException, Request, Response, UploadFile, Query
 from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
@@ -620,16 +621,49 @@ async def increment_talked_count(user_id: int):
     return {"id": user_id, "talked_count": new_count}
 
 
+def calculate_similarity(user1: dict, user2: dict) -> int:
+    score = 0
+    for field in ["gender", "department", "hometown"]:
+        if user1.get(field) and user1.get(field) == user2.get(field):
+            score += 1
+    for field in ["hobbies", "languages"]:
+        list1 = set(user1.get(field) or [])
+        list2 = set(user2.get(field) or [])
+        score += len(list1 & list2)
+    return score
 @app.get("/get_recommended_list", response_model=List[int])
-async def get_recommended_list(current_user: dict = Depends(get_current_user)):
-    query = (
-        users.select()
-        .where(and_(users.c.status == 1, users.c.id != current_user["id"]))
-        .order_by(users.c.talked_count.asc())
+async def get_recommended_list(
+        current_user: dict = Depends(get_current_user),
+        gender_filter: Optional[int] = Query(0),  # 1=same gender filter on
+        languages_filter: Optional[int] = Query(0) # 1=same language filter on
+    ):
+    current_user_data = await database.fetch_one(
+        users.select().where(users.c.id == current_user["id"])
     )
-    user_list = await database.fetch_all(query)
-    user_ids = [user["id"] for user in user_list]
-    return user_ids
+    if current_user_data is None:
+        raise HTTPException(status_code=404, detail="Current user not found")
+    query = users.select().where(
+        and_(users.c.status == 1, users.c.id != current_user["id"])
+    )
+    other_users = await database.fetch_all(query)
+    other_users = [dict(u) for u in other_users]
+    recommended_users = []
+    for user in other_users:
+        if gender_filter == 1 and current_user_data["gender"] != user["gender"]:
+            continue
+        if languages_filter == 1 and not set(current_user_data["languages"] or []) & set(user["languages"] or []):
+            continue
+        score = calculate_similarity(dict(current_user_data), dict(user))
+        recommended_users.append({
+            "id": user["id"],
+            "talked_count": user["talked_count"],
+            "similarity": score
+        })
+    recommended_users = sorted(
+        recommended_users,
+        key=lambda u: (u["talked_count"], -u["similarity"])
+    )
+    return [user["id"] for user in recommended_users]
 
 
 @app.get("/users/{user_id}/get_status", response_model=int)
@@ -650,7 +684,9 @@ async def update_status(user_id: int):
     existing_user = await database.fetch_one(query)
     if existing_user is None:
         raise HTTPException(status_code=404, detail="User not found")
-    update_query = users.update().where(users.c.id == user_id).values(status=1)
+    current_status = existing_user["status"]
+    new_status = 0 if current_status == 1 else 1
+    update_query = users.update().where(users.c.id == user_id).values(status=new_status)
     await database.execute(update_query)
     return existing_user
 
