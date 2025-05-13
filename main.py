@@ -2,13 +2,13 @@
 import os
 from datetime import datetime, timedelta
 from typing import List, Optional
-from starlette.middleware.cors import CORSMiddleware
 
 from databases import Database
 
 # secret key の環境変数から読み取り################################################
 from dotenv import load_dotenv  # .envファイルを読み取るためのimport
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 
@@ -27,8 +27,10 @@ from sqlalchemy import (
     Table,
     create_engine,
 )
+from starlette.middleware.cors import CORSMiddleware
 
 from prompt import generate_dummy_topic  # ← 追加
+from save_image import save_image_locally
 
 load_dotenv()
 SECRET_KEY = os.getenv("SECRET_KEY") or "dummy-secret"
@@ -51,9 +53,9 @@ app = FastAPI()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,   # 追記により追加
-    allow_methods=["*"],      # 追記により追加
-    allow_headers=["*"]       # 追記により追加
+    allow_credentials=True,  # 追記により追加
+    allow_methods=["*"],  # 追記により追加
+    allow_headers=["*"],  # 追記により追加
 )
 
 DATABASE_URL = "sqlite:///./database.db"  # 同じディレクトリ内のtest2.dbファイル
@@ -101,6 +103,7 @@ users = Table(
     Column("languages", JSON, nullable=True),
     Column("status", Integer, nullable=True),
     Column("talk_times", Integer, nullable=True),
+    Column("image_path", String, nullable=True),
 )
 
 events = Table(
@@ -501,3 +504,54 @@ async def generate_topic(current_user: dict = Depends(get_current_user)):
     generated_topic = generate_dummy_topic(name, department, hobbies, hometown)
 
     return {"suggested_topic": generated_topic}
+
+
+@app.post("/users/{user_id}/upload_image")
+async def upload_image(user_id: int, file: UploadFile = File(...)):
+    # ユーザーの存在確認
+    query = users.select().where(users.c.id == user_id)
+    user = await database.fetch_one(query)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    # ユーザーがいない場合のエラー処理
+    # 画像保存
+    image_path = save_image_locally(file, user_id)
+
+    # 画像パスをデータベースに保存
+    update_query = (
+        users.update().where(users.c.id == user_id).values(image_path=image_path)
+    )
+    await database.execute(update_query)
+
+    return {"message": "Image uploaded successfully", "image_path": image_path}
+
+
+# アップロード後、画像のパスが users テーブルの image_path カラムに保存される。
+@app.get("/users/{user_id}/image")
+async def get_user_image(user_id: int):
+    # ユーザーの画像パスを取得
+    query = users.select().where(users.c.id == user_id)
+    user = await database.fetch_one(query)
+    if user is None or not user["image_path"]:
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    # 画像ファイルが存在するか確認
+    image_path = user["image_path"]
+    if not os.path.exists(image_path):
+        raise HTTPException(status_code=404, detail="Image file not found")
+
+    # 画像を返す
+    return FileResponse(image_path)
+
+
+# とりあえず画像をUploaded_imagesに追加。
+
+
+@app.post("/upload/")
+async def upload_file(file: UploadFile = File(...)):
+    # ファイルの保存
+    file_path = save_image_locally(
+        file, 0
+    )  # File format specified by save_image_locally
+
+    return {"info": f"file '{file.filename}' saved at '{file_path}'"}
