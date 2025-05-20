@@ -402,6 +402,15 @@ async def get_current_user_info(request: Request):
     return user
 
 
+@app.get("/users/{user_id}/profile", response_model=UserInfoOut)
+async def get_user_profile_by_id(user_id: int):
+    query = users.select().where(users.c.id == user_id)
+    user = await database.fetch_one(query)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    return user
+
+
 # {
 #  "id": 1,
 #  "name": "たくみ"
@@ -828,7 +837,9 @@ async def generate_conversation_topic(
         f"相手（{target['name']}）は {target.get('department', '不明')} 所属、"
         f"趣味は {', '.join(target.get('hobbies', []) or [])}、"
         f"{target.get('hometown', '不明')} 出身です。\n\n"
-        "この情報をもとに、自然な会話のきっかけとなる話題を1つ提案してください。また、この際、リストを提示するような感じで、あくまで会話の主体はユーザで、話題のヒントとなる形で教えてください。相槌はいらないので、答えだけ教えてください"
+        "この情報をもとに、自然な会話のきっかけとなる話題を複数箇条書きで提案してください。"
+        "例：「筋トレの頻度」「休日の過ごし方」など単語で"
+        "ただし、会話の対称は「相手」の方で、主体は「あなた」です。"
     )
 
     topic = generate_openai_topic(prompt)
@@ -850,6 +861,25 @@ async def upload_image(
     )
     await database.execute(update_query)
 
+    return {"message": "Image uploaded successfully", "image_path": image_path}
+
+
+@app.post("/users/{user_id}/register_image")
+async def register_image(user_id: int, file: UploadFile = File(...)):
+    # ユーザーの存在確認
+    query = users.select().where(users.c.id == user_id)
+    user = await database.fetch_one(query)
+    if user is None:
+        raise HTTPException(status_code=404, detail="User not found")
+    # ユーザーがいない場合のエラー処理
+    # 画像保存
+    image_path = save_image_locally(file, user_id)
+
+    # 画像パスをデータベースに保存
+    update_query = (
+        users.update().where(users.c.id == user_id).values(image_path=image_path)
+    )
+    await database.execute(update_query)
     return {"message": "Image uploaded successfully", "image_path": image_path}
 
 
@@ -880,6 +910,26 @@ async def get_user_image(request: Request):
 
     return FileResponse(
         image_path, media_type="image/jpeg", headers={"Cache-Control": "no-cache"}
+    )
+
+
+@app.get("/users/{user_id}/image")
+async def get_user_image_by_id(user_id: int):
+    # ユーザー取得
+    query = users.select().where(users.c.id == user_id)
+    user = await database.fetch_one(query)
+
+    if user is None or not user["image_path"]:
+        raise HTTPException(status_code=404, detail="Image not found")
+
+    image_path = user["image_path"]
+    if not os.path.exists(image_path):
+        raise HTTPException(status_code=404, detail="Image file not found")
+
+    return FileResponse(
+        image_path,
+        media_type="image/jpeg",  # 画像の形式に応じて変更可
+        headers={"Cache-Control": "no-cache"},
     )
 
 
