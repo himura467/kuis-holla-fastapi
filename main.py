@@ -8,8 +8,17 @@ from databases.backends.sqlite import Record  # またはPostgreSQLなら対応�
 
 # secret key の環境変数から読み取り################################################
 from dotenv import load_dotenv  # .envファイルを読み取るためのimport
-
-from fastapi import Body, Depends, FastAPI, File, HTTPException, Request, Response, UploadFile, Query
+from fastapi import (
+    Body,
+    Depends,
+    FastAPI,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
@@ -27,10 +36,10 @@ from sqlalchemy import (
     MetaData,
     String,
     Table,
+    Text,
     and_,
     create_engine,
     select,
-    Text,
 )
 from starlette.middleware.cors import CORSMiddleware
 
@@ -122,7 +131,7 @@ events = Table(
     Column("end_time", DateTime, nullable=True),
     Column("registered_users", JSON, nullable=True),
     Column("creater", String, nullable=False),
-    Column("event_abstract", Text, nullable = True),
+    Column("event_abstract", Text, nullable=True),
 )
 
 engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
@@ -176,7 +185,7 @@ class EventCreate(BaseModel):
     start_time: datetime
     end_time: datetime
     registered_users: List[str]
-    event_abstract: str#イベント概要を追加
+    event_abstract: str  # イベント概要を追加
 
 
 # Pydanticモデル（入力と出力）
@@ -199,7 +208,8 @@ class EventIn(BaseModel):
     start_time: Optional[datetime] = None
     end_time: Optional[datetime] = None
     registered_users: Optional[List[str]] = None
-    event_abstract: Optional[str] = None #イベント概要を追加
+    event_abstract: Optional[str] = None  # イベント概要を追加
+
 
 class EventOut(BaseModel):
     id: int
@@ -214,7 +224,8 @@ class EventInfoOut(BaseModel):
     end_time: datetime
     registered_users: List[str]
     creater: str
-    event_abstract: str #イベント概要を追加
+    event_abstract: str  # イベント概要を追加
+
 
 class UserChange(BaseModel):
     name: Optional[str] = None
@@ -501,7 +512,7 @@ async def register_event(
         end_time=event.end_time,
         registered_users=event.registered_users,
         creater=current_user["name"],
-        event_abstract = event.event_abstract,
+        event_abstract=event.event_abstract,
     )
     event_id = await database.execute(query)
     return {**event.dict(), "id": event_id}
