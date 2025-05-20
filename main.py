@@ -8,8 +8,17 @@ from databases.backends.sqlite import Record  # またはPostgreSQLなら対応�
 
 # secret key の環境変数から読み取り################################################
 from dotenv import load_dotenv  # .envファイルを読み取るためのimport
-
-from fastapi import Body, Depends, FastAPI, File, HTTPException, Request, Response, UploadFile, Query
+from fastapi import (
+    Body,
+    Depends,
+    FastAPI,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
@@ -383,9 +392,11 @@ async def create_user(user: UserIn):
 #  "name": "たくみ"
 # }
 
+
 def personality_score_cal(q1, q2):
     personality = q1 + 8 - (q2)
     return personality
+
 
 @app.post("/register", response_model=UserOut)  ##登録用POST
 async def register_user(user: UserCreate):
