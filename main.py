@@ -159,6 +159,11 @@ class UserCreate(BaseModel):  # 登録用
     q2: int
 
 
+class UserAdmin(BaseModel):  # 登録用
+    name: str
+    password: str
+
+
 class UserLogin(BaseModel):  # 未使用（今はOAuth2Formに依存）
     name: str  # <=clientの送ってくる[name]は、str型出なくてはならない
 
@@ -449,7 +454,7 @@ async def register_user(user: UserCreate):
 
 
 @app.post("/register/admin", response_model=UserOut)  ##登録用POST
-async def register_user_admin(user: UserCreate):
+async def register_user_admin(user: UserAdmin):
     hashed_pw = hash_password(user.password)
 
     query = users.insert().values(
@@ -657,6 +662,15 @@ async def join_event(event_id: int, current_user: dict = Depends(get_current_use
         events.select().where(events.c.id == event_id)
     )
     return updated_event
+
+
+@app.get("/events/{event_id}/details", response_model=EventInfoOut)
+async def get_event_details(event_id: int):
+    query = events.select().where(events.c.id == event_id)
+    event = await database.fetch_one(query)
+    if not event:
+        raise HTTPException(status_code=404, detail="No events found")
+    return dict(event)
 
 
 #####話しかけられた回数を更新するためのエンドポイントを追加
