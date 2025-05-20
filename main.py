@@ -814,7 +814,7 @@ async def upload_image(
     return {"message": "Image uploaded successfully", "image_path": image_path}
 
 @app.post("/users/{user_id}/register_image")
-async def upload_image(user_id: int, file: UploadFile = File(...)):
+async def register_image(user_id: int, file: UploadFile = File(...)):
     # ユーザーの存在確認
     query = users.select().where(users.c.id == user_id)
     user = await database.fetch_one(query)
