@@ -354,12 +354,25 @@ async def read_current_user(request: Request):
     return user
 
 
-@app.get("/users/{user_id}", response_model=UserInfoOut)  # (ユーザ個別情報)
-async def get_user_by_id(user_id: int):
-    query = users.select().where(users.c.id == user_id)
+@app.get("/users/profile", response_model=UserInfoOut)
+async def get_current_user_info(request: Request):
+    token = request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username = payload.get("sub")
+        if not username:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    query = users.select().where(users.c.name == username)
     user = await database.fetch_one(query)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found")
+
     return user
 
 
@@ -436,25 +449,38 @@ async def register_user_admin(user: UserCreate):
     return {**user.dict(exclude={"password"}), "id": user_id}
 
 
-@app.put("/users/{user_id}", response_model=UserInfoOut)
-async def update_user(user_id: int, user: UserChange = Body(...)):
-    # 対象のユーザーが存在するか確認
-    query = users.select().where(users.c.id == user_id)
+@app.put("/users/update", response_model=UserInfoOut)
+async def update_current_user(request: Request, user: UserChange = Body(...)):
+    token = request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username = payload.get("sub")
+        if not username:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    # ユーザーをDBから取得
+    query = users.select().where(users.c.name == username)
     existing_user = await database.fetch_one(query)
     if existing_user is None:
         raise HTTPException(status_code=404, detail="User not found")
 
-    # 更新クエリを発行
+    user_id = existing_user["id"]
+
+    # 更新内容整形
     update_data = user.dict(exclude_unset=True)
     if "password" in update_data:
         update_data["hashed_password"] = hash_password(update_data.pop("password"))
+
     if update_data:
         update_query = users.update().where(users.c.id == user_id).values(**update_data)
         await database.execute(update_query)
 
-    await database.execute(update_query)
-
-    # 更新後の情報を取得して返す
+    # 更新後の情報取得
     updated_user = await database.fetch_one(users.select().where(users.c.id == user_id))
     return updated_user
 
@@ -510,12 +536,12 @@ async def register_event(
         place=event.place,
         start_time=event.start_time,
         end_time=event.end_time,
-        registered_users=event.registered_users,
+        registered_users=[current_user["name"]],
         creater=current_user["name"],
         event_abstract=event.event_abstract,
     )
     event_id = await database.execute(query)
-    return {**event.dict(), "id": event_id}
+    return {**event.dict(), "registered_users": [current_user["name"]], "id": event_id}
 
 
 # GET: 現在進行中のイベントを獲得
@@ -760,14 +786,12 @@ async def generate_conversation_topic(
     return {"suggested_topic": topic}
 
 
-@app.post("/users/{user_id}/upload_image")
-async def upload_image(user_id: int, file: UploadFile = File(...)):
-    # ユーザーの存在確認
-    query = users.select().where(users.c.id == user_id)
-    user = await database.fetch_one(query)
-    if user is None:
-        raise HTTPException(status_code=404, detail="User not found")
-    # ユーザーがいない場合のエラー処理
+@app.post("/users/upload_image")
+async def upload_image(
+    file: UploadFile = File(...), current_user: dict = Depends(get_current_user)
+):
+    user_id = current_user["id"]
+
     # 画像保存
     image_path = save_image_locally(file, user_id)
 
@@ -781,21 +805,33 @@ async def upload_image(user_id: int, file: UploadFile = File(...)):
 
 
 # アップロード後、画像のパスが users テーブルの image_path カラムに保存される。
-@app.get("/users/{user_id}/image")
-async def get_user_image(user_id: int):
-    # ユーザーの画像パスを取得
-    query = users.select().where(users.c.id == user_id)
+@app.get("/users/image")
+async def get_user_image(request: Request):
+    token = request.cookies.get("access_token")
+    if not token:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        username = payload.get("sub")
+        if username is None:
+            raise HTTPException(status_code=401, detail="Invalid token")
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid token")
+
+    # ユーザー取得
+    query = users.select().where(users.c.name == username)
     user = await database.fetch_one(query)
     if user is None or not user["image_path"]:
         raise HTTPException(status_code=404, detail="Image not found")
 
-    # 画像ファイルが存在するか確認
     image_path = user["image_path"]
     if not os.path.exists(image_path):
         raise HTTPException(status_code=404, detail="Image file not found")
 
-    # 画像を返す
-    return FileResponse(image_path)
+    return FileResponse(
+        image_path, media_type="image/jpeg", headers={"Cache-Control": "no-cache"}
+    )
 
 
 # とりあえず画像をUploaded_imagesに追加。
