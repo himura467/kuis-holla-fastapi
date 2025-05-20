@@ -321,6 +321,21 @@ async def login(response: Response, form_data: OAuth2PasswordRequestForm = Depen
     return {"message": "Login successful"}
 
 
+@app.post("/logout")
+async def logout(response: Response):
+    response.set_cookie(
+        key="access_token",
+        value="",  # 清空值
+        httponly=True,
+        secure=False,
+        samesite="lax",
+        expires=0,
+        max_age=0,
+        path="/",
+    )
+    return {"message": "Logout successful"}
+
+
 # GET: ユーザー一覧取得
 @app.get("/users", response_model=list[UserOut])  # (ユーザ全員の情報)
 async def get_users():
