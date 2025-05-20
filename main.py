@@ -109,6 +109,7 @@ users = Table(
     Column("talked_count", Integer, nullable=True),
     Column("role", String, nullable=False),
     Column("image_path", String, nullable=True),
+    Column("personality", Integer, nullable=True),
 )
 
 events = Table(
@@ -143,6 +144,8 @@ class UserCreate(BaseModel):  # 登録用
     hobbies: List[str]  # not sure about this one
     hometown: str
     languages: List[str]
+    q1: int
+    q2: int
 
 
 class UserLogin(BaseModel):  # 未使用（今はOAuth2Formに依存）
@@ -221,6 +224,8 @@ class UserChange(BaseModel):
     hobbies: Optional[List[str]] = None
     hometown: Optional[str] = None
     languages: Optional[List[str]] = None
+    q1: Optional[int] = None
+    q2: Optional[int] = None
 
 
 class UserInfoOut(BaseModel):
@@ -232,6 +237,7 @@ class UserInfoOut(BaseModel):
     hometown: str
     languages: List[str]
     status: int
+    personality: int
 
 
 # トークン検証用の関数
@@ -377,10 +383,14 @@ async def create_user(user: UserIn):
 #  "name": "たくみ"
 # }
 
+def personality_score_cal(q1, q2):
+    personality = q1 + 8 - (q2)
+    return personality
 
 @app.post("/register", response_model=UserOut)  ##登録用POST
 async def register_user(user: UserCreate):
     hashed_pw = hash_password(user.password)
+    personality = personality_score_cal(user.q1, user.q2)
 
     query = users.insert().values(
         name=user.name,
@@ -392,6 +402,7 @@ async def register_user(user: UserCreate):
         languages=user.languages,
         status=0,
         role="participants",
+        personality=personality,
     )
 
     user_id = await database.execute(query)
@@ -630,6 +641,8 @@ def calculate_similarity(user1: dict, user2: dict) -> int:
         list1 = set(user1.get(field) or [])
         list2 = set(user2.get(field) or [])
         score += len(list1 & list2)
+    for field in ["personality"]:
+        score += 7 - (abs(user1.get(field) - user2.get(field)) * 6 / 12)
     return score
 
 
