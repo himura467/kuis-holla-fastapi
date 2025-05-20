@@ -7,7 +7,7 @@ from databases import Database
 
 # secret key の環境変数から読み取り################################################
 from dotenv import load_dotenv  # .envファイルを読み取るためのimport
-from fastapi import Body, Depends, FastAPI, File, HTTPException, UploadFile, Query
+from fastapi import Body, Depends, FastAPI, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
@@ -595,12 +595,14 @@ def calculate_similarity(user1: dict, user2: dict) -> int:
         list2 = set(user2.get(field) or [])
         score += len(list1 & list2)
     return score
+
+
 @app.get("/get_recommended_list", response_model=List[int])
 async def get_recommended_list(
-        current_user: dict = Depends(get_current_user),
-        gender_filter: Optional[int] = Query(0),  # 1=same gender filter on
-        languages_filter: Optional[int] = Query(0) # 1=same language filter on
-    ):
+    current_user: dict = Depends(get_current_user),
+    gender_filter: Optional[int] = Query(0),  # 1=same gender filter on
+    languages_filter: Optional[int] = Query(0),  # 1=same language filter on
+):
     current_user_data = await database.fetch_one(
         users.select().where(users.c.id == current_user["id"])
     )
@@ -610,22 +612,25 @@ async def get_recommended_list(
         and_(users.c.status == 1, users.c.id != current_user["id"])
     )
     other_users = await database.fetch_all(query)
-    other_users = [dict(u) for u in other_users]
+
     recommended_users = []
     for user in other_users:
         if gender_filter == 1 and current_user_data["gender"] != user["gender"]:
             continue
-        if languages_filter == 1 and not set(current_user_data["languages"] or []) & set(user["languages"] or []):
+        if languages_filter == 1 and not set(
+            current_user_data["languages"] or []
+        ) & set(user["languages"] or []):
             continue
         score = calculate_similarity(dict(current_user_data), dict(user))
-        recommended_users.append({
-            "id": user["id"],
-            "talked_count": user["talked_count"],
-            "similarity": score
-        })
+        recommended_users.append(
+            {
+                "id": user["id"],
+                "talked_count": user["talked_count"],
+                "similarity": score,
+            }
+        )
     recommended_users = sorted(
-        recommended_users,
-        key=lambda u: (u["talked_count"], -u["similarity"])
+        recommended_users, key=lambda u: (u["talked_count"], -u["similarity"])
     )
     return [user["id"] for user in recommended_users]
 
