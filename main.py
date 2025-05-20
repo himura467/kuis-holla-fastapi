@@ -642,7 +642,12 @@ def calculate_similarity(user1: dict, user2: dict) -> int:
         list2 = set(user2.get(field) or [])
         score += len(list1 & list2)
     for field in ["personality"]:
-        score += 7 - (abs(user1.get(field) - user2.get(field)) * 6 / 12)
+        p1 = user1.get(field)
+        p2 = user2.get(field)
+        if p1 is not None and p2 is not None:
+            score += 7 - (abs(p1 - p2) * 6 / 12)
+        else:
+            score += 0
     return score
 
 
