@@ -8,8 +8,17 @@ from databases.backends.sqlite import Record  # またはPostgreSQLなら対応�
 
 # secret key の環境変数から読み取り################################################
 from dotenv import load_dotenv  # .envファイルを読み取るためのimport
-
-from fastapi import Body, Depends, FastAPI, File, HTTPException, Request, Response, UploadFile, Query
+from fastapi import (
+    Body,
+    Depends,
+    FastAPI,
+    File,
+    HTTPException,
+    Query,
+    Request,
+    Response,
+    UploadFile,
+)
 from fastapi.responses import FileResponse
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
@@ -173,6 +182,8 @@ class EventCreate(BaseModel):
     place: str
     start_time: datetime
     end_time: datetime
+    registered_users: List[str]
+
 
 # Pydanticモデル（入力と出力）
 class UserIn(BaseModel):
@@ -655,12 +666,14 @@ def calculate_similarity(user1: dict, user2: dict) -> int:
         list2 = set(user2.get(field) or [])
         score += len(list1 & list2)
     return score
+
+
 @app.get("/get_recommended_list", response_model=List[int])
 async def get_recommended_list(
-        current_user: dict = Depends(get_current_user),
-        gender_filter: Optional[int] = Query(0),  # 1=same gender filter on
-        languages_filter: Optional[int] = Query(0) # 1=same language filter on
-    ):
+    current_user: dict = Depends(get_current_user),
+    gender_filter: Optional[int] = Query(0),  # 1=same gender filter on
+    languages_filter: Optional[int] = Query(0),  # 1=same language filter on
+):
     current_user_data = await database.fetch_one(
         users.select().where(users.c.id == current_user["id"])
     )
@@ -675,17 +688,20 @@ async def get_recommended_list(
     for user in other_users:
         if gender_filter == 1 and current_user_data["gender"] != user["gender"]:
             continue
-        if languages_filter == 1 and not set(current_user_data["languages"] or []) & set(user["languages"] or []):
+        if languages_filter == 1 and not set(
+            current_user_data["languages"] or []
+        ) & set(user["languages"] or []):
             continue
         score = calculate_similarity(dict(current_user_data), dict(user))
-        recommended_users.append({
-            "id": user["id"],
-            "talked_count": user["talked_count"],
-            "similarity": score
-        })
+        recommended_users.append(
+            {
+                "id": user["id"],
+                "talked_count": user["talked_count"],
+                "similarity": score,
+            }
+        )
     recommended_users = sorted(
-        recommended_users,
-        key=lambda u: (u["talked_count"], -u["similarity"])
+        recommended_users, key=lambda u: (u["talked_count"], -u["similarity"])
     )
     return [user["id"] for user in recommended_users]
 
@@ -766,8 +782,7 @@ async def generate_conversation_topic(
 
 @app.post("/users/upload_image")
 async def upload_image(
-    file: UploadFile = File(...),
-    current_user: dict = Depends(get_current_user)
+    file: UploadFile = File(...), current_user: dict = Depends(get_current_user)
 ):
     user_id = current_user["id"]
 
@@ -776,13 +791,12 @@ async def upload_image(
 
     # 画像パスをデータベースに保存
     update_query = (
-        users.update()
-        .where(users.c.id == user_id)
-        .values(image_path=image_path)
+        users.update().where(users.c.id == user_id).values(image_path=image_path)
     )
     await database.execute(update_query)
 
     return {"message": "Image uploaded successfully", "image_path": image_path}
+
 
 # アップロード後、画像のパスが users テーブルの image_path カラムに保存される。
 @app.get("/users/image")
@@ -809,7 +823,9 @@ async def get_user_image(request: Request):
     if not os.path.exists(image_path):
         raise HTTPException(status_code=404, detail="Image file not found")
 
-    return FileResponse(image_path, media_type="image/jpeg", headers={"Cache-Control": "no-cache"})
+    return FileResponse(
+        image_path, media_type="image/jpeg", headers={"Cache-Control": "no-cache"}
+    )
 
 
 # とりあえず画像をUploaded_imagesに追加。
