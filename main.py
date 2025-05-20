@@ -375,6 +375,7 @@ async def get_current_user_info(request: Request):
 
     return user
 
+
 @app.get("/users/{user_id}/profile", response_model=UserInfoOut)
 async def get_user_profile_by_id(user_id: int):
     query = users.select().where(users.c.id == user_id)
@@ -813,6 +814,7 @@ async def upload_image(
 
     return {"message": "Image uploaded successfully", "image_path": image_path}
 
+
 @app.post("/users/{user_id}/register_image")
 async def register_image(user_id: int, file: UploadFile = File(...)):
     # ユーザーの存在確認
@@ -860,6 +862,7 @@ async def get_user_image(request: Request):
     return FileResponse(
         image_path, media_type="image/jpeg", headers={"Cache-Control": "no-cache"}
     )
+
 
 @app.get("/users/{user_id}/image")
 async def get_user_image_by_id(user_id: int):
