@@ -192,7 +192,7 @@ class EventCreate(BaseModel):
     place: str
     start_time: datetime
     end_time: datetime
-    registered_users: List[str]
+    # registered_users: List[str]
     event_abstract: str  # イベント概要を追加
 
 
