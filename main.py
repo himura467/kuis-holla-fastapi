@@ -157,6 +157,8 @@ class UserCreate(BaseModel):  # 登録用
     languages: List[str]
     q1: int
     q2: int
+    q3: int
+    q4: int
 
 
 class UserAdmin(BaseModel):  # 登録用
@@ -245,6 +247,8 @@ class UserChange(BaseModel):
     languages: Optional[List[str]] = None
     q1: Optional[int] = None
     q2: Optional[int] = None
+    q3: Optional[int] = None
+    q4: Optional[int] = None
 
 
 class UserInfoOut(BaseModel):
@@ -430,16 +434,16 @@ async def create_user(user: UserIn):
 #  "name": "たくみ"
 # }
 
-
-def personality_score_cal(q1, q2):
-    personality = q1 + 8 - (q2)
+## the higher, the more extrovert
+def personality_score_cal(q1, q2, q3, q4):
+    personality = q1 + (8 - q2) + (8 - q3) + q4
     return personality
 
 
 @app.post("/register", response_model=UserOut)  ##登録用POST
 async def register_user(user: UserCreate):
     hashed_pw = hash_password(user.password)
-    personality = personality_score_cal(user.q1, user.q2)
+    personality = personality_score_cal(user.q1, user.q2, user.q3, user.q4)
 
     query = users.insert().values(
         name=user.name,
