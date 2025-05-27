@@ -315,8 +315,8 @@ async def login(response: Response, form_data: OAuth2PasswordRequestForm = Depen
         key="access_token",
         value=access_token,
         httponly=True,
-        secure=False,  # ローカル開発なら False、本番では True
-        samesite="lax",  # cross-site の場合は "None" + secure=True
+        secure=True,  # ローカル開発なら False、本番では True
+        samesite="none",  # cross-site の場合は "None" + secure=True
         max_age=1800,
         expires=1800,
         path="/",
@@ -437,7 +437,7 @@ async def create_user(user: UserIn):
 
 # the higher, the more extrovert
 def personality_score_cal(q1, q2, q3, q4):
-    personality = q1 + (8 - q2) + (8 - q3) + q4
+    personality = q1 + (4 - q2) + (4 - q3) + q4
     return personality
 
 
@@ -722,7 +722,7 @@ def calculate_similarity(user1: dict, user2: dict) -> int:
         p1 = user1.get(field)
         p2 = user2.get(field)
         if p1 is not None and p2 is not None:
-            score += 7 - (abs(p1 - p2) * 6 / 12)
+            score += 3 - abs(p1 - p2) / 4
         else:
             score += 0
     return score
