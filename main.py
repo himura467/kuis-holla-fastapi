@@ -740,7 +740,7 @@ async def get_recommended_list(
     if current_user_data is None:
         raise HTTPException(status_code=404, detail="Current user not found")
     query = users.select().where(
-        and_(users.c.status == 1, users.c.id != current_user["id"])
+        and_(users.c.status == 0, users.c.id != current_user["id"])
     )
     other_users = await database.fetch_all(query)
 
