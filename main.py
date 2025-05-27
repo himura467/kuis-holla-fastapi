@@ -71,8 +71,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-DATABASE_URL = "sqlite:///./database.db"  # 同じディレクトリ内のtest2.dbファイル
+DATABASE_URL = os.getenv("DATABASE_URL")
+#DATABASE_URL = "sqlite:///./database.db"  # 同じディレクトリ内のtest2.dbファイル
 database = Database(DATABASE_URL)
 metadata = MetaData()  # metadataを生成
 
@@ -135,10 +135,8 @@ events = Table(
     Column("event_abstract", Text, nullable=True),
 )
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
-# 実際にDBと通信するための接続機
-# SQliteからPostgreSQLに切り替える時は、（connect_argsは不要）
-# engine = create_engine("postgresql://user:pass@localhost/dbname")に変える
+#engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False}) #SQLite用
+engine = create_engine(DATABASE_URL) #PostgreSQL用
 
 
 metadata.create_all(
