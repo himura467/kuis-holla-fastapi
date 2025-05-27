@@ -331,8 +331,8 @@ async def logout(response: Response):
         key="access_token",
         value="",  # 清空值
         httponly=True,
-        secure=False,
-        samesite="lax",
+        secure=True,
+        samesite="none",
         expires=0,
         max_age=0,
         path="/",
