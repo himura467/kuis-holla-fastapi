@@ -316,7 +316,7 @@ async def login(response: Response, form_data: OAuth2PasswordRequestForm = Depen
         value=access_token,
         httponly=True,
         secure=False,  # ローカル開発なら False、本番では True
-        samesite="none",  # cross-site の場合は "None" + secure=True
+        samesite="lax",  # cross-site の場合は "None" + secure=True
         max_age=1800,
         expires=1800,
         path="/",
@@ -332,7 +332,7 @@ async def logout(response: Response):
         value="",  # 清空值
         httponly=True,
         secure=False,
-        samesite="none",
+        samesite="lax",
         expires=0,
         max_age=0,
         path="/",
