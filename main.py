@@ -434,7 +434,8 @@ async def create_user(user: UserIn):
 #  "name": "たくみ"
 # }
 
-## the higher, the more extrovert
+
+# the higher, the more extrovert
 def personality_score_cal(q1, q2, q3, q4):
     personality = q1 + (8 - q2) + (8 - q3) + q4
     return personality
