@@ -842,7 +842,7 @@ async def generate_conversation_topic(
         f"相手（{target['name']}）は {target.get('department', '不明')} 所属、"
         f"趣味は {', '.join(target.get('hobbies', []) or [])}、"
         f"{target.get('hometown', '不明')} 出身です。\n\n"
-        "この情報をもとに、自然な会話のきっかけとなる話題を複数箇条書きで提案してください。"
+        "この情報をもとに、自然な会話のきっかけとなる話題を5個箇条書きで提案してください。"
         "例：「筋トレの頻度」「休日の過ごし方」など単語で"
         "ただし、会話の対称は「相手」の方で、主体は「あなた」です。"
     )
