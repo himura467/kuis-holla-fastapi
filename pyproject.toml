@@ -16,7 +16,9 @@ python-jose = {extras = ["cryptography"], version = "^3.4.0"}
 passlib = {extras = ["bcrypt"], version = "^1.7.4"}
 python-dotenv = "^1.1.0"
 openai = "^1.75.0"
-
+asyncpg = "^0.29.0" 
+psycopg2-binary = "^2.9"
+bcrypt = "==3.2.0"
 [tool.poetry.group.dev.dependencies]
 uvicorn = {extras = ["standard"], version = "^0.34.0"}
 poethepoet = "^0.34.0"
@@ -40,3 +42,5 @@ black = "black main.py"
 isort = "isort main.py"
 lint = ["mypy", "flake8"]
 format = ["black", "isort"]
+
+
